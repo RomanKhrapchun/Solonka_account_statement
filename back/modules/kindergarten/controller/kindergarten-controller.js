@@ -1,0 +1,802 @@
+const kindergartenService = require("../service/kindergarten-service");
+const Logger = require("../../../utils/logger")
+
+class KindergartenController {
+
+    async getDebtByDebtorId(request, reply) {
+        try {
+            const debtData = await kindergartenService.getDebtByDebtorId(request)
+            return reply.send(debtData)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send(error)
+        }
+    }
+
+    async findDebtByFilter(request, reply) {
+        try {
+            const debtData = await kindergartenService.findDebtByFilter(request)
+            return reply.send(debtData)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send(error)
+        }
+    }
+
+    async generateWordByDebtId(request, reply) {
+        try {
+            const debtData = await kindergartenService.generateWordByDebtId(request, reply)
+            return reply.send(debtData)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send(error)
+        }
+    }
+
+    async printDebtId(request, reply) {
+        try {
+            const debtData = await kindergartenService.printDebtId(request, reply)
+            return reply.send(debtData)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send(error)
+        }
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ ГРУП САДОЧКА
+    // ===============================
+
+    async findGroupsByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findGroupsByFilter(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send({ 
+                error: 'Failed to fetch kindergarten groups',
+                message: error.message 
+            })
+        }
+    }
+
+    async createGroup(request, reply) {
+        try {
+            const result = await kindergartenService.createGroup(request)
+            reply.status(201).send({ 
+                message: 'Групу створено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат назви групи
+            if (error.message.includes('існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create kindergarten group',
+                message: error.message 
+            })
+        }
+    }
+
+    async updateGroup(request, reply) {
+        try {
+            const result = await kindergartenService.updateGroup(request)
+            reply.status(200).send({ 
+                message: 'Групу оновлено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат назви групи
+            if (error.message.includes('існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо чи група існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update kindergarten group',
+                message: error.message 
+            })
+        }
+    }
+
+    async deleteGroup(request, reply) {
+        try {
+            await kindergartenService.deleteGroup(request)
+            reply.status(200).send({ 
+                message: 'Групу видалено успішно'
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо чи група існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete kindergarten group',
+                message: error.message 
+            })
+        }
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ ДІТЕЙ САДОЧКА
+    // ===============================
+
+    async findChildrenByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findChildrenByFilter(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send({ 
+                error: 'Failed to fetch children',
+                message: error.message 
+            })
+        }
+    }
+
+    async getChildById(request, reply) {
+        try {
+            const data = await kindergartenService.getChildById(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to fetch child',
+                message: error.message 
+            })
+        }
+    }
+
+    async createChild(request, reply) {
+        try {
+            const result = await kindergartenService.createChild(request)
+            reply.status(201).send({ 
+                message: 'Дитину створено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо на неіснуючу групу
+            if (error.message.includes('Група не знайдена')) {
+                return reply.status(404).send({ 
+                    error: 'Group Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create child',
+                message: error.message 
+            })
+        }
+    }
+
+    async updateChild(request, reply) {
+        try {
+            const result = await kindergartenService.updateChild(request)
+            reply.status(200).send({ 
+                message: 'Дані дитини оновлено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо чи дитина існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо на неіснуючу групу
+            if (error.message.includes('Група не знайдена')) {
+                return reply.status(404).send({ 
+                    error: 'Group Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update child',
+                message: error.message 
+            })
+        }
+    }
+
+    async deleteChild(request, reply) {
+        try {
+            await kindergartenService.deleteChild(request)
+            reply.status(200).send({ 
+                message: 'Дитину видалено успішно'
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо чи дитина існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete child',
+                message: error.message 
+            })
+        }
+    }
+
+        // ===============================
+    // МЕТОДИ ДЛЯ ВІДВІДУВАНОСТІ САДОЧКА
+    // ===============================
+
+    async findAttendanceByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findAttendanceByFilter(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send({ 
+                error: 'Failed to fetch attendance',
+                message: error.message 
+            })
+        }
+    }
+
+    async getAttendanceById(request, reply) {
+        try {
+            const data = await kindergartenService.getAttendanceById(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to fetch attendance',
+                message: error.message 
+            })
+        }
+    }
+
+    async createAttendance(request, reply) {
+        try {
+            const result = await kindergartenService.createAttendance(request)
+            reply.status(201).send({ 
+                message: 'Запис відвідуваності створено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо на неіснуючу дитину
+            if (error.message.includes('Дитину не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Child Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create attendance',
+                message: error.message 
+            })
+        }
+    }
+
+    async updateAttendance(request, reply) {
+        try {
+            const result = await kindergartenService.updateAttendance(request)
+            reply.status(200).send({ 
+                message: 'Запис відвідуваності оновлено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо чи запис існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо на неіснуючу дитину
+            if (error.message.includes('Дитину не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Child Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update attendance',
+                message: error.message 
+            })
+        }
+    }
+
+    async deleteAttendance(request, reply) {
+        try {
+            await kindergartenService.deleteAttendance(request)
+            reply.status(200).send({ 
+                message: 'Запис відвідуваності видалено успішно'
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо чи запис існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete attendance',
+                message: error.message 
+            })
+        }
+    }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ ВАРТОСТІ ХАРЧУВАННЯ (скопійовано з груп)
+    // ===============================
+
+    async findDailyFoodCostByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findDailyFoodCostByFilter(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send({ 
+                error: 'Failed to fetch daily food cost',
+                message: error.message 
+            })
+        }
+    }
+
+    async createDailyFoodCost(request, reply) {
+        try {
+            const result = await kindergartenService.createDailyFoodCost(request)
+            reply.status(201).send({ 
+                message: 'Вартість харчування створено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to create daily food cost',
+                message: error.message 
+            })
+        }
+    }
+
+    async updateDailyFoodCost(request, reply) {
+        try {
+            const result = await kindergartenService.updateDailyFoodCost(request)
+            reply.status(200).send({ 
+                message: 'Вартість харчування оновлено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to update daily food cost',
+                message: error.message 
+            })
+        }
+    }
+
+    async deleteDailyFoodCost(request, reply) {
+        try {
+            const result = await kindergartenService.deleteDailyFoodCost(request)
+            reply.status(200).send({ 
+                message: 'Вартість харчування видалено успішно',
+                data: result 
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to delete daily food cost',
+                message: error.message 
+            })
+        }
+    }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ БАТЬКІВСЬКОЇ ПЛАТИ
+    // ===============================
+
+    async findBillingByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findBillingByFilter(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            reply.status(400).send({ 
+                error: 'Failed to fetch billing records',
+                message: error.message 
+            })
+        }
+    }
+
+    async getBillingById(request, reply) {
+        try {
+            const data = await kindergartenService.getBillingById(request)
+            reply.status(200).send(data)
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to fetch billing record',
+                message: error.message 
+            })
+        }
+    }
+
+    async createBilling(request, reply) {
+        try {
+            const result = await kindergartenService.createBilling(request)
+            reply.status(201).send({ 
+                message: 'Запис батьківської плати створено успішно',
+                id: result.id
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create billing record',
+                message: error.message 
+            })
+        }
+    }
+
+    async updateBilling(request, reply) {
+        try {
+            await kindergartenService.updateBilling(request)
+            reply.status(200).send({ 
+                message: 'Запис батьківської плати оновлено успішно'
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо на дублікат
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                })
+            }
+
+            // Перевіряємо чи запис існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update billing record',
+                message: error.message 
+            })
+        }
+    }
+
+    async deleteBilling(request, reply) {
+        try {
+            await kindergartenService.deleteBilling(request)
+            reply.status(200).send({ 
+                message: 'Запис батьківської плати видалено успішно'
+            })
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack })
+            
+            // Перевіряємо чи запис існує
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                })
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete billing record',
+                message: error.message 
+            })
+        }
+    }
+
+    // ===============================
+    // API ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ===============================
+
+    async getMobileAttendance(request, reply) {
+        try {
+            const timestamp = parseInt(request.params.date);
+            const data = await kindergartenService.getMobileAttendance(timestamp, request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch mobile attendance',
+                message: error.message 
+            });
+        }
+    }
+
+    async saveMobileAttendance(request, reply) {
+        try {
+            const result = await kindergartenService.saveMobileAttendance(request);
+            reply.status(200).send({ 
+                success: true,
+                message: 'Відвідуваність збережено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to save mobile attendance',
+                message: error.message 
+            });
+        }
+    }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
+    // ===============================
+
+    async findAdminsByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findAdminsByFilter(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch kindergarten admins',
+                message: error.message 
+            });
+        }
+    }
+
+    async getAdminById(request, reply) {
+        try {
+            const data = await kindergartenService.getAdminById(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to fetch admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async createAdmin(request, reply) {
+        try {
+            const result = await kindergartenService.createAdmin(request);
+            reply.status(201).send({ 
+                message: 'Адміністратора створено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async updateAdmin(request, reply) {
+        try {
+            const result = await kindergartenService.updateAdmin(request);
+            reply.status(200).send({ 
+                message: 'Дані адміністратора оновлено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async deleteAdmin(request, reply) {
+        try {
+            await kindergartenService.deleteAdmin(request);
+            reply.status(200).send({ 
+                message: 'Адміністратора видалено успішно'
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete admin',
+                message: error.message 
+            });
+        }
+    }
+
+    // ===============================
+    // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
+    // ===============================
+
+    async verifyEducator(request, reply) {
+        try {
+            const result = await kindergartenService.verifyEducator(request);
+            reply.status(200).send(result);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to verify educator',
+                message: error.message 
+            });
+        }
+    }
+}
+
+module.exports = new KindergartenController();
