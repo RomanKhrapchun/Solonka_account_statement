@@ -76,27 +76,36 @@ class KindergartenService {
 
     async createGroup(request) {
         const {
-            
             group_name,
             group_type
         } = request.body;
 
+        // ❌ ВИДАЛИТИ ЦЮ КОНВЕРТАЦІЮ:
+        // const groupTypeMapping = {
+        //     'young': 'молодша група',
+        //     'older': 'старша група'
+        // };
+        // const group_type_ua = groupTypeMapping[group_type] || group_type;
+
+        const existingGroup = await KindergartenRepository.getGroupByName(group_name);
+        if (existingGroup && existingGroup.length > 0) {
+            throw new Error('Група з такою назвою вже існує');
+        }
 
         const groupData = {
-            
             group_name,
-            group_type,
+            group_type, // ✅ Зберігаємо як є: 'young' або 'older'
             created_at: new Date()
         };
 
         const result = await KindergartenRepository.createGroup(groupData);
 
         await logRepository.createLog({
-            row_pk_id: result.insertId || result.id,
+            row_pk_id: result.insertId || result.id || result[0]?.id,
             uid: request?.user?.id,
             action: 'INSERT',
             client_addr: request?.ip,
-            application_name: 'Створення групи садочку',
+            application_name: 'Створення групи садочка',
             action_stamp_tx: new Date(),
             action_stamp_stm: new Date(),
             action_stamp_clk: new Date(),
@@ -117,6 +126,25 @@ class KindergartenService {
             throw new Error('Групу не знайдено');
         }
 
+        // ❌ ВИДАЛИТИ ЦЮ КОНВЕРТАЦІЮ:
+        // if (updateData.group_type) {
+        //     const groupTypeMapping = {
+        //         'young': 'молодша група',
+        //         'older': 'старша група'
+        //     };
+        //     updateData.group_type = groupTypeMapping[updateData.group_type] || updateData.group_type;
+        // }
+
+        if (updateData.group_name) {
+            const duplicateGroup = await KindergartenRepository.getGroupByName(
+                updateData.group_name,
+                id
+            );
+
+            if (duplicateGroup && duplicateGroup.length > 0) {
+                throw new Error('Група з такою назвою вже існує');
+            }
+        }
 
         const result = await KindergartenRepository.updateGroup(id, updateData);
 
@@ -125,7 +153,7 @@ class KindergartenService {
             uid: request?.user?.id,
             action: 'UPDATE',
             client_addr: request?.ip,
-            application_name: 'Оновлення групи садочку',
+            application_name: 'Оновлення групи садочка',
             action_stamp_tx: new Date(),
             action_stamp_stm: new Date(),
             action_stamp_clk: new Date(),
@@ -439,23 +467,22 @@ class KindergartenService {
         }
 
         const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(date, child_id);
-
         if (existingAttendance && existingAttendance.length > 0) {
-            throw new Error('Запис відвідуваності на цю дату для цієї дитини вже існує');
+            throw new Error('Запис відвідуваності для цієї дитини на цю дату вже існує');
         }
 
         const attendanceData = {
             date,
             child_id,
             attendance_status,
-            notes,
+            notes: notes || null,
             created_at: new Date()
         };
 
         const result = await KindergartenRepository.createAttendance(attendanceData);
 
         await logRepository.createLog({
-            row_pk_id: result.insertId || result.id,
+            row_pk_id: result.insertId || result.id || result[0]?.id,
             uid: request?.user?.id,
             action: 'INSERT',
             client_addr: request?.ip,
@@ -468,6 +495,96 @@ class KindergartenService {
             oid: '16507',
         });
 
+        // ✅ АВТОМАТИЧНО СТВОРЮЄМО PAYMENT_STATEMENT ЯКЩО ДИТИНА ПРИСУТНЯ
+        if (attendance_status === 'present') {
+            try {
+                console.log('🎯 Дитина присутня, створюємо payment_statement');
+                console.log('📅 Дата:', date);
+                console.log('👶 child_id:', child_id);
+                
+                const existingPayment = await KindergartenRepository.getPaymentStatementByDateAndChild(date, child_id);
+                
+                if (!existingPayment || existingPayment.length === 0) {
+                    console.log('✅ Виписки ще немає, створюємо нову');
+                    
+                    const child = existingChild[0];
+                    const groupId = child.group_id;
+                    
+                    console.log('👥 Group ID:', groupId);
+
+                    let payment_amount = 0;
+                    
+                    if (groupId) {
+                        const groupData = await KindergartenRepository.getGroupById(groupId);
+                        
+                        console.log('📊 Дані групи:', groupData);
+                        
+                        if (groupData && groupData.length > 0) {
+                            const groupType = groupData[0].group_type;
+                            const groupName = groupData[0].group_name;
+                            
+                            console.log('🔍 DEBUG:', {
+                                groupType,
+                                groupName,
+                                date
+                            });
+                            
+                            const foodCostResult = await KindergartenRepository.getDailyFoodCostByDateAndGroupType(date, groupType);
+                            
+                            console.log('💰 Food cost result:', foodCostResult);
+                            
+                            if (foodCostResult && foodCostResult.length > 0 && foodCostResult[0].cost) {
+                                payment_amount = parseFloat(foodCostResult[0].cost);
+                                console.log('✅ Final payment_amount:', payment_amount);
+                            } else {
+                                console.log('⚠️ Не знайдено вартість харчування для дати:', date);
+                            }
+                        }
+                    } else {
+                        console.log('⚠️ У дитини немає group_id');
+                    }
+
+                    const paymentData = {
+                        date,
+                        child_id,
+                        payment_amount,
+                        created_at: new Date()
+                    };
+
+                    console.log('💾 Зберігаємо payment_statement:', paymentData);
+
+                    await KindergartenRepository.createPaymentStatement(paymentData);
+
+                    await logRepository.createLog({
+                        row_pk_id: null,
+                        uid: request?.user?.id,
+                        action: 'INSERT',
+                        client_addr: request?.ip,
+                        application_name: 'Автоматичне створення виписки по оплаті',
+                        action_stamp_tx: new Date(),
+                        action_stamp_stm: new Date(),
+                        action_stamp_clk: new Date(),
+                        schema_name: 'ower',
+                        table_name: 'payment_statements',
+                        oid: '16509',
+                    });
+                    
+                    console.log('✅ Payment statement успішно створено!');
+                } else {
+                    console.log('ℹ️ Виписка вже існує для цієї дати та дитини');
+                }
+            } catch (error) {
+                console.error('❌ Помилка при створенні payment_statement:', {
+                    error: error.message,
+                    stack: error.stack,
+                    date,
+                    child_id
+                });
+            }
+        } else {
+            console.log('ℹ️ Дитина не присутня (статус:', attendance_status, '), payment_statement не створюємо');
+        }
+
         return result;
     }
 
@@ -475,27 +592,37 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        const existingRecord = await KindergartenRepository.getAttendanceById(id);
-        if (!existingRecord || existingRecord.length === 0) {
+        const existingAttendance = await KindergartenRepository.getAttendanceById(id);
+        if (!existingAttendance || existingAttendance.length === 0) {
             throw new Error('Запис відвідуваності не знайдено');
         }
 
-        if (updateData.child_id) {
-            const existingChild = await KindergartenRepository.getChildById(updateData.child_id);
-            if (!existingChild || existingChild.length === 0) {
-                throw new Error('Дитину не знайдено');
-            }
-        }
+        const oldAttendance = existingAttendance[0];
+        const oldStatus = oldAttendance.attendance_status;
+        const newStatus = updateData.attendance_status;
+        const date = oldAttendance.date;
+        const child_id = oldAttendance.child_id;
 
-        if (updateData.date && updateData.child_id) {
-            const duplicateRecord = await KindergartenRepository.getAttendanceByDateAndChild(
-                updateData.date, 
-                updateData.child_id,
+        console.log('🔄 Оновлення відвідуваності:', {
+            oldStatus,
+            newStatus,
+            date,
+            child_id
+        });
+
+        // Перевірка на дублікат при зміні дати або дитини
+        if (updateData.date || updateData.child_id) {
+            const checkDate = updateData.date || date;
+            const checkChildId = updateData.child_id || child_id;
+            
+            const duplicateAttendance = await KindergartenRepository.getAttendanceByDateAndChild(
+                checkDate,
+                checkChildId,
                 id
             );
 
-            if (duplicateRecord && duplicateRecord.length > 0) {
-                throw new Error('Запис відвідуваності на цю дату для цієї дитини вже існує');
+            if (duplicateAttendance && duplicateAttendance.length > 0) {
+                throw new Error('Запис відвідуваності для цієї дитини на цю дату вже існує');
             }
         }
 
@@ -514,6 +641,95 @@ class KindergartenService {
             table_name: 'attendance',
             oid: '16507',
         });
+
+        // ✅ ЛОГІКА РОБОТИ З PAYMENT_STATEMENTS
+        try {
+            const existingPayment = await KindergartenRepository.getPaymentStatementByDateAndChild(date, child_id);
+
+            // Якщо статус змінився з "present" на щось інше - ВИДАЛЯЄМО payment_statement
+            if (oldStatus === 'present' && newStatus !== 'present') {
+                console.log('🗑️ Дитина більше не присутня, видаляємо payment_statement');
+                
+                if (existingPayment && existingPayment.length > 0) {
+                    const paymentId = existingPayment[0].id;
+                    await KindergartenRepository.deletePaymentStatement(paymentId);
+                    
+                    await logRepository.createLog({
+                        row_pk_id: paymentId,
+                        uid: request?.user?.id,
+                        action: 'DELETE',
+                        client_addr: request?.ip,
+                        application_name: 'Автоматичне видалення виписки по оплаті',
+                        action_stamp_tx: new Date(),
+                        action_stamp_stm: new Date(),
+                        action_stamp_clk: new Date(),
+                        schema_name: 'ower',
+                        table_name: 'payment_statements',
+                        oid: '16509',
+                    });
+                    
+                    console.log('✅ Payment statement видалено');
+                }
+            }
+            
+            // Якщо статус змінився на "present" - СТВОРЮЄМО payment_statement
+            else if (oldStatus !== 'present' && newStatus === 'present') {
+                console.log('✅ Дитина тепер присутня, створюємо payment_statement');
+                
+                if (!existingPayment || existingPayment.length === 0) {
+                    const child = await KindergartenRepository.getChildById(child_id);
+                    
+                    if (child && child.length > 0) {
+                        const groupId = child[0].group_id;
+                        let payment_amount = 0;
+                        
+                        if (groupId) {
+                            const groupData = await KindergartenRepository.getGroupById(groupId);
+                            
+                            if (groupData && groupData.length > 0) {
+                                const groupType = groupData[0].group_type;
+                                const foodCostResult = await KindergartenRepository.getDailyFoodCostByDateAndGroupType(date, groupType);
+                                
+                                if (foodCostResult && foodCostResult.length > 0 && foodCostResult[0].cost) {
+                                    payment_amount = parseFloat(foodCostResult[0].cost);
+                                }
+                            }
+                        }
+
+                        const paymentData = {
+                            date,
+                            child_id,
+                            payment_amount,
+                            created_at: new Date()
+                        };
+
+                        await KindergartenRepository.createPaymentStatement(paymentData);
+
+                        await logRepository.createLog({
+                            row_pk_id: null,
+                            uid: request?.user?.id,
+                            action: 'INSERT',
+                            client_addr: request?.ip,
+                            application_name: 'Автоматичне створення виписки по оплаті',
+                            action_stamp_tx: new Date(),
+                            action_stamp_stm: new Date(),
+                            action_stamp_clk: new Date(),
+                            schema_name: 'ower',
+                            table_name: 'payment_statements',
+                            oid: '16509',
+                        });
+                        
+                        console.log('✅ Payment statement створено');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('❌ Помилка при роботі з payment_statement:', {
+                error: error.message,
+                date,
+                child_id
+            });
+        }
 
         return result;
     }
@@ -777,45 +993,71 @@ class KindergartenService {
         const {
             parent_name,
             payment_month,
-            current_debt = 0,
-            current_accrual = 0,
-            current_payment = 0,
-            notes
-        } = request.body;
-
-        const existingRecord = await KindergartenRepository.getBillingByParentAndMonth(
-            parent_name, 
-            payment_month
-        );
-
-        if (existingRecord && existingRecord.length > 0) {
-            throw new Error(`Запис батьківської плати для "${parent_name}" на ${new Date(payment_month).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long' })} вже існує`);
-        }
-
-        const recordData = {
-            parent_name,
-            payment_month,
             current_debt,
             current_accrual,
             current_payment,
-            notes,
+            notes
+        } = request.body;
+
+        // Конвертуємо "2025-06" в "2025-06-01"
+        let formattedMonth = payment_month;
+        if (payment_month && !payment_month.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            formattedMonth = `${payment_month}-01`;
+        }
+
+        // Перевірка на дублікат
+        const existingBilling = await KindergartenRepository.getBillingByParentAndMonth(
+            parent_name,
+            formattedMonth
+        );
+        
+        if (existingBilling && existingBilling.length > 0) {
+            const existing = existingBilling[0]; // ✅ Важливо брати перший елемент
+            
+            console.log('🔍 Found existing billing:', existing); // DEBUG
+            
+            // Створюємо помилку з даними
+            const error = new Error('DUPLICATE_BILLING');
+            error.statusCode = 409;
+            error.existingData = {
+                id: existing.id,
+                parent_name: existing.parent_name,
+                payment_month: existing.payment_month,
+                current_debt: parseFloat(existing.current_debt) || 0,
+                current_accrual: parseFloat(existing.current_accrual) || 0,
+                current_payment: parseFloat(existing.current_payment) || 0,
+                balance: parseFloat(existing.balance) || 0,
+                notes: existing.notes || ''
+            };
+            
+            console.log('📤 Sending existingData:', error.existingData); // DEBUG
+            throw error;
+        }
+
+        const billingData = {
+            parent_name,
+            payment_month: formattedMonth,
+            current_debt: parseFloat(current_debt) || 0,
+            current_accrual: parseFloat(current_accrual) || 0,
+            current_payment: parseFloat(current_payment) || 0,
+            notes: notes || null,
             created_at: new Date()
         };
 
-        const result = await KindergartenRepository.createBilling(recordData);
+        const result = await KindergartenRepository.createBilling(billingData);
 
         await logRepository.createLog({
-            row_pk_id: result.insertId || result.id,
+            row_pk_id: result.insertId || result.id || result[0]?.id,
             uid: request?.user?.id,
             action: 'INSERT',
             client_addr: request?.ip,
-            application_name: 'Створення батьківської плати',
+            application_name: 'Створення запису батьківської плати',
             action_stamp_tx: new Date(),
             action_stamp_stm: new Date(),
             action_stamp_clk: new Date(),
             schema_name: 'ower',
-            table_name: 'kindergarten_billing',
-            oid: '16509',
+            table_name: 'billing',
+            oid: '16508',
         });
 
         return result;
@@ -825,21 +1067,41 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        const existingRecord = await KindergartenRepository.getBillingById(id);
-        if (!existingRecord || existingRecord.length === 0) {
+        const existingBilling = await KindergartenRepository.getBillingById(id);
+        if (!existingBilling || existingBilling.length === 0) {
             throw new Error('Запис батьківської плати не знайдено');
         }
 
-        if (updateData.parent_name && updateData.payment_month) {
-            const duplicateRecord = await KindergartenRepository.getBillingByParentAndMonth(
-                updateData.parent_name,
-                updateData.payment_month,
+        // ✅ Конвертуємо "2025-06" в "2025-06-01" для PostgreSQL DATE
+        if (updateData.payment_month && !updateData.payment_month.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            updateData.payment_month = `${updateData.payment_month}-01`;
+        }
+
+        // Перевірка на дублікат при зміні ПІБ або місяця
+        if (updateData.parent_name || updateData.payment_month) {
+            const checkName = updateData.parent_name || existingBilling[0].parent_name;
+            const checkMonth = updateData.payment_month || existingBilling[0].payment_month;
+            
+            const duplicateBilling = await KindergartenRepository.getBillingByParentAndMonth(
+                checkName,
+                checkMonth,
                 id
             );
 
-            if (duplicateRecord && duplicateRecord.length > 0) {
-                throw new Error(`Запис батьківської плати для "${updateData.parent_name}" на ${new Date(updateData.payment_month).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long' })} вже існує`);
+            if (duplicateBilling && duplicateBilling.length > 0) {
+                throw new Error('Запис для цього батька та місяця вже існує');
             }
+        }
+
+        // Конвертуємо числові значення
+        if (updateData.current_debt !== undefined) {
+            updateData.current_debt = parseFloat(updateData.current_debt) || 0;
+        }
+        if (updateData.current_accrual !== undefined) {
+            updateData.current_accrual = parseFloat(updateData.current_accrual) || 0;
+        }
+        if (updateData.current_payment !== undefined) {
+            updateData.current_payment = parseFloat(updateData.current_payment) || 0;
         }
 
         const result = await KindergartenRepository.updateBilling(id, updateData);
@@ -849,13 +1111,13 @@ class KindergartenService {
             uid: request?.user?.id,
             action: 'UPDATE',
             client_addr: request?.ip,
-            application_name: 'Оновлення батьківської плати',
+            application_name: 'Оновлення запису батьківської плати',
             action_stamp_tx: new Date(),
             action_stamp_stm: new Date(),
             action_stamp_clk: new Date(),
             schema_name: 'ower',
-            table_name: 'kindergarten_billing',
-            oid: '16509',
+            table_name: 'billing',
+            oid: '16508',
         });
 
         return result;
@@ -1341,6 +1603,244 @@ class KindergartenService {
             console.error('[verifyEducator] Fatal error:', error);
             throw error;
         }
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ ВИПИСКИ ПО ОПЛАТІ
+    // ===============================
+
+    async findPaymentStatementsByFilter(request) {
+        const { 
+            page = 1, 
+            limit = 16, 
+            sort_by = 'date', 
+            sort_direction = 'desc',
+            date_from,
+            date_to,
+            child_name,
+            group_id,
+            ...whereConditions 
+        } = request.body;
+
+        const { offset } = paginate(page, limit);
+        
+        if (date_from || date_to || child_name || group_id) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request?.user?.id,
+                action: 'SEARCH',
+                client_addr: request?.ip,
+                application_name: 'Пошук виписки по оплаті',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'payment_statements',
+                oid: '16509',
+            });
+        }
+
+        const userData = await KindergartenRepository.findPaymentStatementsByFilter({
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            date_from,
+            date_to,
+            child_name,
+            group_id,
+            ...whereConditions
+        });
+
+        return paginationData(userData[0], page, limit);
+    }
+
+    async getPaymentStatementById(request) {
+        const { id } = request.params;
+
+        const paymentStatement = await KindergartenRepository.getPaymentStatementById(id);
+        
+        if (!paymentStatement || paymentStatement.length === 0) {
+            throw new Error('Запис не знайдено');
+        }
+
+        return paymentStatement[0];
+    }
+
+    async createPaymentStatement(request) {
+        const {
+            date,
+            child_id,
+            payment_amount
+        } = request.body;
+
+        const existingChild = await KindergartenRepository.getChildById(child_id);
+        if (!existingChild || existingChild.length === 0) {
+            throw new Error('Дитину не знайдено');
+        }
+
+        const existingStatement = await KindergartenRepository.getPaymentStatementByDateAndChild(date, child_id);
+        if (existingStatement && existingStatement.length > 0) {
+            throw new Error('Виписка для цієї дитини на цю дату вже існує');
+        }
+
+        const statementData = {
+            date,
+            child_id,
+            payment_amount,
+            created_at: new Date()
+        };
+
+        const result = await KindergartenRepository.createPaymentStatement(statementData);
+
+        await logRepository.createLog({
+            row_pk_id: result.insertId || result.id || result[0]?.id,
+            uid: request?.user?.id,
+            action: 'INSERT',
+            client_addr: request?.ip,
+            application_name: 'Створення виписки по оплаті',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'payment_statements',
+            oid: '16509',
+        });
+
+        return result;
+    }
+
+    async createPaymentStatementAuto(request) {
+        const {
+            date,
+            child_id
+        } = request.body;
+
+        const existingChild = await KindergartenRepository.getChildById(child_id);
+        if (!existingChild || existingChild.length === 0) {
+            throw new Error('Дитину не знайдено');
+        }
+
+        const child = existingChild[0];
+        const groupName = child.group_name;
+
+        const existingStatement = await KindergartenRepository.getPaymentStatementByDateAndChild(date, child_id);
+        if (existingStatement && existingStatement.length > 0) {
+            throw new Error('Виписка для цієї дитини на цю дату вже існує');
+        }
+
+        const foodCostResult = await KindergartenRepository.getDailyFoodCostByDateAndGroup(date, groupName);
+        
+        let payment_amount = 0;
+        if (foodCostResult && foodCostResult.length > 0 && foodCostResult[0].cost) {
+            payment_amount = parseFloat(foodCostResult[0].cost);
+        }
+
+        if (payment_amount === 0) {
+            throw new Error(`Вартість харчування для групи "${groupName}" на дату ${date} не знайдена`);
+        }
+
+        const statementData = {
+            date,
+            child_id,
+            payment_amount,
+            created_at: new Date()
+        };
+
+        const result = await KindergartenRepository.createPaymentStatement(statementData);
+
+        await logRepository.createLog({
+            row_pk_id: result.insertId || result.id || result[0]?.id,
+            uid: request?.user?.id,
+            action: 'INSERT',
+            client_addr: request?.ip,
+            application_name: 'Створення виписки по оплаті (автозаповнення)',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'payment_statements',
+            oid: '16509',
+        });
+
+        return result;
+    }
+
+    async updatePaymentStatement(request) {
+        const { id } = request.params;
+        const updateData = request.body;
+
+        const existingStatement = await KindergartenRepository.getPaymentStatementById(id);
+        if (!existingStatement || existingStatement.length === 0) {
+            throw new Error('Запис не знайдено');
+        }
+
+        if (updateData.child_id) {
+            const existingChild = await KindergartenRepository.getChildById(updateData.child_id);
+            if (!existingChild || existingChild.length === 0) {
+                throw new Error('Дитину не знайдено');
+            }
+        }
+
+        if (updateData.date || updateData.child_id) {
+            const checkDate = updateData.date || existingStatement[0].date;
+            const checkChildId = updateData.child_id || existingStatement[0].child_id;
+            
+            const duplicateStatement = await KindergartenRepository.getPaymentStatementByDateAndChild(
+                checkDate,
+                checkChildId,
+                id
+            );
+
+            if (duplicateStatement && duplicateStatement.length > 0) {
+                throw new Error('Виписка для цієї дитини на цю дату вже існує');
+            }
+        }
+
+        const result = await KindergartenRepository.updatePaymentStatement(id, updateData);
+
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'UPDATE',
+            client_addr: request?.ip,
+            application_name: 'Оновлення виписки по оплаті',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'payment_statements',
+            oid: '16509',
+        });
+
+        return result;
+    }
+
+    async deletePaymentStatement(request) {
+        const { id } = request.params;
+
+        const existingStatement = await KindergartenRepository.getPaymentStatementById(id);
+        if (!existingStatement || existingStatement.length === 0) {
+            throw new Error('Запис не знайдено');
+        }
+
+        const result = await KindergartenRepository.deletePaymentStatement(id);
+
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'DELETE',
+            client_addr: request?.ip,
+            application_name: 'Видалення виписки по оплаті',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'payment_statements',
+            oid: '16509',
+        });
+
+        return result;
     }
 }
 

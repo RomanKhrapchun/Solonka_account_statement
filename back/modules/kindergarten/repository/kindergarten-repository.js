@@ -127,13 +127,13 @@ class KindergartenRepository {
         return await sqlRequest(sql, values);
     }
 
-    async getGroupByNameAndKindergarten(groupName, kindergartenName, excludeId = null) {
+    async getGroupByName(groupName, excludeId = null) {
         let sql = `
-            SELECT id, kindergarten_name, group_name 
+            SELECT id, group_name, group_type 
             FROM ower.kindergarten_groups 
-            WHERE group_name = ? AND kindergarten_name = ?
+            WHERE group_name = ?
         `;
-        const values = [groupName, kindergartenName];
+        const values = [groupName];
 
         if (excludeId) {
             sql += ` AND id != ?`;
@@ -856,13 +856,39 @@ class KindergartenRepository {
         return await sqlRequest(sql, [id]);
     }
 
-    async getBillingByParentAndMonth(parent_name, payment_month) {
+    /**async getBillingByParentAndMonth(parent_name, payment_month) {
         const sql = `
             SELECT id, parent_name, payment_month
             FROM ower.kindergarten_billing 
             WHERE parent_name = ? AND payment_month = ?
         `;
         return await sqlRequest(sql, [parent_name, payment_month]);
+    }**/
+
+    async getBillingByParentAndMonth(parent_name, payment_month, excludeId = null) {
+        let sql = `
+            SELECT 
+                id, 
+                parent_name, 
+                payment_month,
+                current_debt,
+                current_accrual,
+                current_payment,
+                (current_debt + current_accrual - current_payment) as balance,
+                notes
+            FROM ower.kindergarten_billing 
+            WHERE parent_name = ? AND payment_month = ?
+        `;
+        
+        const params = [parent_name, payment_month];
+        
+        // Додатково виключаємо поточний запис при оновленні
+        if (excludeId) {
+            sql += ` AND id != ?`;
+            params.push(excludeId);
+        }
+        
+        return await sqlRequest(sql, params);
     }
 
     async getBillingByParentAndMonthExcludeId(parent_name, payment_month, excludeId) {
@@ -1194,6 +1220,196 @@ class KindergartenRepository {
             LIMIT 1
         `;
         return await sqlRequest(sql, [phoneNumber]);
+    }
+
+     // ===============================
+    // МЕТОДИ ДЛЯ ВИПИСКИ ПО ОПЛАТІ
+    // ===============================
+
+    async findPaymentStatementsByFilter(options) {
+        const {
+            limit,
+            offset,
+            sort_by = 'date',
+            sort_direction = 'desc',
+            date_from,
+            date_to,
+            child_name,
+            group_id
+        } = options;
+
+        const values = [];
+        let sql = `
+            SELECT json_agg(rw) as data,
+                max(cnt) as count
+            FROM (
+                SELECT json_build_object(
+                    'id', ps.id,
+                    'date', ps.date,
+                    'child_id', ps.child_id,
+                    'child_name', cr.child_name,
+                    'parent_name', cr.parent_name,
+                    'group_id', cr.group_id,
+                    'group_name', kg.group_name,
+                    'payment_amount', ps.payment_amount,
+                    'created_at', ps.created_at
+                ) as rw,
+                count(*) over () as cnt
+                FROM ower.payment_statements ps
+                LEFT JOIN ower.children_roster cr ON cr.id = ps.child_id
+                LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+                WHERE 1=1
+        `;
+
+        if (date_from) {
+            sql += ` AND ps.date >= ?`;
+            values.push(date_from);
+        }
+
+        if (date_to) {
+            sql += ` AND ps.date <= ?`;
+            values.push(date_to);
+        }
+
+        if (child_name) {
+            sql += ` AND cr.child_name ILIKE ?`;
+            values.push(`%${child_name}%`);
+        }
+
+        if (group_id) {
+            sql += ` AND cr.group_id = ?`;
+            values.push(group_id);
+        }
+
+        const allowedSortFields = ['id', 'date', 'child_name', 'payment_amount', 'created_at'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'date';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'DESC';
+        
+        if (validSortBy === 'child_name') {
+            sql += ` ORDER BY cr.child_name ${validSortDirection}`;
+        } else {
+            sql += ` ORDER BY ps.${validSortBy} ${validSortDirection}`;
+        }
+        
+        sql += ` LIMIT ? OFFSET ?`;
+        values.push(limit, offset);
+        sql += `) q`;
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getPaymentStatementById(id) {
+        const sql = `
+            SELECT 
+                ps.id,
+                ps.date,
+                ps.child_id,
+                ps.payment_amount,
+                ps.created_at,
+                cr.child_name,
+                cr.parent_name,
+                cr.group_id,
+                kg.group_name,
+                kg.kindergarten_name
+            FROM ower.payment_statements ps
+            LEFT JOIN ower.children_roster cr ON cr.id = ps.child_id
+            LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+            WHERE ps.id = ?
+        `;
+        return await sqlRequest(sql, [id]);
+    }
+
+    async getPaymentStatementByDateAndChild(date, childId, excludeId = null) {
+        let sql = `
+            SELECT id, date, child_id, payment_amount 
+            FROM ower.payment_statements 
+            WHERE date = ? AND child_id = ?
+        `;
+        const values = [date, childId];
+
+        if (excludeId) {
+            sql += ` AND id != ?`;
+            values.push(excludeId);
+        }
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getDailyFoodCostByDateAndGroup(date, groupName) {
+        const sql = `
+            SELECT 
+                CASE 
+                    WHEN LOWER(TRIM(?)) = 'молодша група' THEN young_group_cost
+                    WHEN LOWER(TRIM(?)) = 'старша група' THEN older_group_cost
+                    ELSE 0
+                END as cost
+            FROM ower.daily_food_cost
+            WHERE date = ?
+            LIMIT 1
+        `;
+        return await sqlRequest(sql, [groupName, groupName, date]);
+    }
+
+    async createPaymentStatement(data) {
+        const {
+            date,
+            child_id,
+            payment_amount,
+            created_at
+        } = data;
+
+        const sql = `
+            INSERT INTO ower.payment_statements 
+            (date, child_id, payment_amount, created_at)
+            VALUES (?, ?, ?, ?)
+            RETURNING id, date, child_id, payment_amount, created_at
+        `;
+
+        const values = [date, child_id, payment_amount, created_at];
+        return await sqlRequest(sql, values);
+    }
+
+    async updatePaymentStatement(id, data) {
+        const fields = Object.keys(data).map(field => `${field} = ?`).join(', ');
+        const values = [...Object.values(data), id];
+        
+        const sql = `
+            UPDATE ower.payment_statements 
+            SET ${fields}
+            WHERE id = ?
+            RETURNING id, date, child_id, payment_amount, created_at
+        `;
+        
+        return await sqlRequest(sql, values);
+    }
+
+    async deletePaymentStatement(id) {
+        const sql = `
+            DELETE FROM ower.payment_statements 
+            WHERE id = ?
+            RETURNING id
+        `;
+        
+        return await sqlRequest(sql, [id]);
+    }
+
+    // Отримати вартість харчування по ТИПУ групи (а не по назві)
+    async getDailyFoodCostByDateAndGroupType(date, groupType) {
+        const column = groupType === 'young' ? 'young_group_cost' : 
+                    groupType === 'older' ? 'older_group_cost' : null;
+        
+        if (!column) {
+            return [{ cost: 0 }];
+        }
+        
+        const sql = `
+            SELECT ${column} as cost
+            FROM ower.daily_food_cost
+            WHERE date = ?
+            LIMIT 1
+        `;
+        
+        return await sqlRequest(sql, [date]);
     }
 }
 

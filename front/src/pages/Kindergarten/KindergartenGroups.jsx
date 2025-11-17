@@ -443,10 +443,10 @@ const KindergartenGroups = () => {
     };
 
     const handleSaveGroup = async () => {
-        const { kindergarten_name, group_name, group_type } = modalState.formData;
+        const { group_name, group_type } = modalState.formData;
         
         // Валідація
-        if (!kindergarten_name.trim() || !group_name.trim() || !group_type) {
+        if (!group_name.trim() || !group_type) {
             notification({
                 type: 'warning',
                 placement: 'top',
@@ -462,7 +462,6 @@ const KindergartenGroups = () => {
             await fetchFunction('api/kindergarten/groups', {
                 method: 'POST',
                 data: {
-                    kindergarten_name: kindergarten_name.trim(),
                     group_name: group_name.trim(),
                     group_type: String(group_type)
                 }
@@ -528,10 +527,10 @@ const KindergartenGroups = () => {
     };
 
     const handleUpdateGroup = async () => {
-        const { kindergarten_name, group_name, group_type } = editModalState.formData;
+        const { group_name, group_type } = editModalState.formData;
         
         // Валідація
-        if (!kindergarten_name.trim() || !group_name.trim() || !group_type) {
+        if (!group_name.trim() || !group_type) {
             notification({
                 type: 'warning',
                 placement: 'top',
@@ -547,7 +546,6 @@ const KindergartenGroups = () => {
             await fetchFunction(`api/kindergarten/groups/${editModalState.groupId}`, {
                 method: 'PUT',
                 data: {
-                    kindergarten_name: kindergarten_name.trim(),
                     group_name: group_name.trim(),
                     group_type: String(group_type)
                 }

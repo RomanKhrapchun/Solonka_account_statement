@@ -551,26 +551,34 @@ class KindergartenController {
 
     async createBilling(request, reply) {
         try {
-            const result = await kindergartenService.createBilling(request)
+            const result = await kindergartenService.createBilling(request);
             reply.status(201).send({ 
-                message: 'Запис батьківської плати створено успішно',
-                id: result.id
-            })
+                message: 'Запис створено успішно',
+                data: result 
+            });
         } catch (error) {
-            Logger.error(error.message, { stack: error.stack })
+            Logger.error(error.message, { stack: error.stack });
             
-            // Перевіряємо на дублікат
-            if (error.message.includes('вже існує')) {
+            // ✅ Обробка дубліката
+            if (error.message === 'DUPLICATE_BILLING' && error.existingData) {
+                return reply.status(409).send({ 
+                    error: 'DUPLICATE_BILLING',
+                    message: 'Запис для цього батька та місяця вже існує',
+                    existingData: error.existingData
+                });
+            }
+
+            if (error.message.includes('існує')) {
                 return reply.status(409).send({ 
                     error: 'Conflict',
                     message: error.message 
-                })
+                });
             }
-            
+
             reply.status(400).send({ 
-                error: 'Failed to create billing record',
+                error: 'Failed to create billing',
                 message: error.message 
-            })
+            });
         }
     }
 
@@ -794,6 +802,237 @@ class KindergartenController {
             reply.status(400).send({ 
                 error: 'Failed to verify educator',
                 message: error.message 
+            });
+        }
+    }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ ВИПИСКИ ПО ОПЛАТІ
+    // ===============================
+
+    async findPaymentStatementsByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findPaymentStatementsByFilter(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch payment statements',
+                message: error.message 
+            });
+        }
+    }
+
+    async getPaymentStatementById(request, reply) {
+        try {
+            const data = await kindergartenService.getPaymentStatementById(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to get payment statement',
+                message: error.message 
+            });
+        }
+    }
+
+    async createPaymentStatement(request, reply) {
+        try {
+            const result = await kindergartenService.createPaymentStatement(request);
+            reply.status(201).send({ 
+                message: 'Виписку по оплаті створено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to create payment statement',
+                message: error.message 
+            });
+        }
+    }
+
+    async createPaymentStatementAuto(request, reply) {
+        try {
+            const result = await kindergartenService.createPaymentStatementAuto(request);
+            reply.status(201).send({ 
+                message: 'Виписку по оплаті створено успішно з автозаповненням суми',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+
+            if (error.message.includes('не знайдено') || error.message.includes('не знайдена')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to create payment statement',
+                message: error.message 
+            });
+        }
+    }
+
+    async updatePaymentStatement(request, reply) {
+        try {
+            const result = await kindergartenService.updatePaymentStatement(request);
+            reply.status(200).send({ 
+                message: 'Виписку по оплаті оновлено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+
+            reply.status(400).send({ 
+                error: 'Failed to update payment statement',
+                message: error.message 
+            });
+        }
+    }
+
+    async deletePaymentStatement(request, reply) {
+        try {
+            await kindergartenService.deletePaymentStatement(request);
+            reply.status(200).send({ 
+                message: 'Виписку по оплаті видалено успішно' 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete payment statement',
+                message: error.message 
+            });
+        }
+    }
+
+    async parseBillingPDF(request, reply) {
+        try {
+            const pdf = require('pdf-parse');
+            
+            let buffer = null;
+            
+            if (request.body?.file?.value) {
+                buffer = await request.body.file.value.toBuffer();
+            } else if (request.body?.file) {
+                buffer = await request.body.file.toBuffer();
+            } else {
+                const firstKey = Object.keys(request.body || {})[0];
+                if (firstKey && request.body[firstKey]) {
+                    buffer = await request.body[firstKey].toBuffer();
+                }
+            }
+            
+            if (!buffer) {
+                throw new Error('Файл не завантажено');
+            }
+            
+            const pdfData = await pdf(buffer);
+            const text = pdfData.text;
+            
+            console.log('📄 PDF Text (excerpt):', text.substring(0, 800));
+            
+            // ✅ ПІБ - тільки великі літери перед "(Адреса платника)"
+            const nameMatch = text.match(/([А-ЯІЇЄҐ][А-ЯІЇЄҐ\s]+[А-ЯІЇЄҐ])\s*\(Адреса платника\)/);
+            
+            // ✅ Витягуємо всі числа формату XXX.XX
+            const allNumbers = text.match(/\d+\.\d+/g);
+            console.log('🔢 Всі числа:', allNumbers);
+            
+            let debt = 0, accrued = 0, paid = 0;
+            
+            if (allNumbers && allNumbers.length >= 7) {
+                // Перше число - борг (674.03)
+                debt = parseFloat(allNumbers[0]) || 0;
+                
+                // 5-те число - нараховано (672.62)
+                accrued = parseFloat(allNumbers[4]) || 0;
+                
+                // 7-ме число - оплачено (960.37)
+                paid = parseFloat(allNumbers[6]) || 0;
+            }
+            
+            // ✅ Місяць - "Червень 2025"
+            const monthMatch = text.match(/(Січень|Лютий|Березень|Квітень|Травень|Червень|Липень|Серпень|Вересень|Жовтень|Листопад|Грудень)\s+(\d{4})/i);
+            
+            const parsedData = {
+                parent_name: nameMatch ? nameMatch[1].trim() : null,
+                current_debt: debt,
+                current_accrual: accrued,
+                current_payment: paid,
+                payment_month: monthMatch ? `${monthMatch[1]} ${monthMatch[2]}` : null
+            };
+            
+            console.log('✅ Parsed data:', parsedData);
+            
+            if (!parsedData.parent_name) {
+                throw new Error('Не вдалося розпізнати ПІБ з квитанції');
+            }
+            
+            return reply.send({
+                success: true,
+                data: parsedData
+            });
+            
+        } catch (error) {
+            console.error('❌ Error parsing PDF:', error);
+            return reply.status(400).send({
+                success: false,
+                error: error.message || 'Помилка обробки PDF'
             });
         }
     }

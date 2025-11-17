@@ -37,6 +37,13 @@ const {
     adminsDeleteSchema,
     verifyEducatorSchema,
     validateMobileAttendanceFormat,
+    paymentStatementFilterSchema,
+    paymentStatementCreateSchema,
+    paymentStatementCreateAutoSchema,
+    paymentStatementUpdateSchema,
+    paymentStatementDeleteSchema,
+    paymentStatementInfoSchema,
+    
 } = require('../schema/kindergarten-schema');
 
 const routes = async (fastify) => {
@@ -252,6 +259,47 @@ const routes = async (fastify) => {
         schema: verifyEducatorSchema,
         preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.verifyEducator);
+
+        // ===============================
+    // РОУТИ ДЛЯ ВИПИСКИ ПО ОПЛАТІ
+    // ===============================
+
+    fastify.post("/payment_statements/filter", { 
+        schema: paymentStatementFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
+    }, kindergartenController.findPaymentStatementsByFilter);
+
+    fastify.get("/payment_statements/:id", { 
+        schema: paymentStatementInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
+        config: viewLimit 
+    }, kindergartenController.getPaymentStatementById);
+
+    fastify.post("/payment_statements", { 
+        schema: paymentStatementCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
+    }, kindergartenController.createPaymentStatement);
+
+    fastify.post("/payment_statements/auto", { 
+        schema: paymentStatementCreateAutoSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
+    }, kindergartenController.createPaymentStatementAuto);
+
+    fastify.put("/payment_statements/:id", { 
+        schema: paymentStatementUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
+    }, kindergartenController.updatePaymentStatement);
+
+    fastify.delete("/payment_statements/:id", { 
+        schema: paymentStatementDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
+    }, kindergartenController.deletePaymentStatement);
+
+    // POST метод для парсингу PDF квитанції
+    fastify.post("/billing/parse-pdf", { 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
+    }, kindergartenController.parseBillingPDF);
+
 }
 
 module.exports = routes;

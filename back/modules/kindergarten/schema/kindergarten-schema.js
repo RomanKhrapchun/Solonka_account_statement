@@ -33,7 +33,7 @@ const kindergartenGroupFilterSchema = {
         group_type: {
             type: 'string',
             optional: true,
-            enum: ['young', 'middle', 'senior', 'preparatory'],
+            enum: ['young', 'older'],
         },
     }
 };
@@ -47,7 +47,7 @@ const kindergartenGroupCreateSchema = {
         },
         group_type: {
             type: 'string',
-            enum: ['young', 'middle', 'senior', 'preparatory'],
+            enum: ['young', 'older'],
         },
     }
 };
@@ -68,7 +68,7 @@ const kindergartenGroupUpdateSchema = {
         },
         group_type: {
             type: 'string',
-            enum: ['young', 'middle', 'senior', 'preparatory'],
+            enum: ['young', 'older'],
             optional: true,
         },
     }
@@ -865,6 +865,120 @@ const validateMobileAttendanceFormat = async (request, reply) => {
     }
 };
 
+const paymentStatementInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        },
+    }
+};
+
+const paymentStatementFilterSchema = {
+    body: {
+        page: {
+            type: 'number',
+            optional: true,
+        },
+        limit: {
+            type: 'number',
+            optional: true,
+        },
+        sort_by: {
+            type: 'string',
+            optional: true,
+        },
+        sort_direction: {
+            type: 'string',
+            optional: true,
+        },
+        date_from: {
+            type: 'string',
+            optional: true,
+            format: 'date',
+        },
+        date_to: {
+            type: 'string',
+            optional: true,
+            format: 'date',
+        },
+        child_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        group_id: {
+            type: 'number',
+            optional: true,
+        },
+    }
+};
+
+const paymentStatementCreateSchema = {
+    body: {
+        date: {
+            type: 'string',
+            format: 'date',
+        },
+        child_id: {
+            type: 'number',
+            positive: true,
+        },
+        payment_amount: {
+            type: 'number',
+            positive: true,
+        },
+    }
+};
+
+const paymentStatementCreateAutoSchema = {
+    body: {
+        date: {
+            type: 'string',
+            format: 'date',
+        },
+        child_id: {
+            type: 'number',
+            positive: true,
+        },
+    }
+};
+
+const paymentStatementUpdateSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        },
+    },
+    body: {
+        date: {
+            type: 'string',
+            format: 'date',
+            optional: true,
+        },
+        child_id: {
+            type: 'number',
+            positive: true,
+            optional: true,
+        },
+        payment_amount: {
+            type: 'number',
+            positive: true,
+            optional: true,
+        },
+    }
+};
+
+const paymentStatementDeleteSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        }
+    }
+};
+
 module.exports = {
     // Групи
     kindergartenGroupFilterSchema,
@@ -911,4 +1025,12 @@ module.exports = {
     adminsInfoSchema,
     verifyEducatorSchema,
     validateMobileAttendanceFormat,
+
+    //Виписки по оплаті
+    paymentStatementFilterSchema,
+    paymentStatementCreateSchema,
+    paymentStatementCreateAutoSchema,
+    paymentStatementUpdateSchema,
+    paymentStatementDeleteSchema,
+    paymentStatementInfoSchema,
 };
