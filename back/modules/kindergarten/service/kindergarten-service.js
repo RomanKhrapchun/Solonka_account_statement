@@ -833,7 +833,7 @@ class KindergartenService {
         const result = await KindergartenRepository.createDailyFoodCost(recordData);
 
         await logRepository.createLog({
-            row_pk_id: result.insertId || result.id,
+            row_pk_id: result.insertId || result.id || result[0]?.id,
             uid: request?.user?.id,
             action: 'INSERT',
             client_addr: request?.ip,
@@ -846,6 +846,15 @@ class KindergartenService {
             oid: '16508',
         });
 
+        // ✅ АВТООНОВЛЕННЯ: Замінити поточну суму на нову
+        try {
+            console.log('🔄 Створення вартості - оновлюємо payment_statements для дати:', date);
+            await this.applyFoodCostToPayments(date, young_group_cost, older_group_cost, 'create');
+            console.log('✅ Payment_statements оновлено');
+        } catch (error) {
+            console.error('❌ Помилка оновлення payment_statements:', error);
+        }
+
         return result;
     }
 
@@ -853,10 +862,15 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
+        // Отримуємо СТАРУ вартість ДО оновлення
         const existingRecord = await KindergartenRepository.getDailyFoodCostById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис не знайдено');
         }
+
+        const oldYoungCost = parseFloat(existingRecord[0].young_group_cost) || 0;
+        const oldOlderCost = parseFloat(existingRecord[0].older_group_cost) || 0;
+        const dateToUpdate = existingRecord[0].date;
 
         if (updateData.date) {
             const duplicateRecord = await KindergartenRepository.getDailyFoodCostByDateAndExcludeId(
@@ -885,16 +899,48 @@ class KindergartenService {
             oid: '16508',
         });
 
+        // ✅ АВТООНОВЛЕННЯ: Додати/відняти різницю
+        try {
+            const updatedRecord = await KindergartenRepository.getDailyFoodCostById(id);
+            const record = updatedRecord[0];
+            
+            const newYoungCost = parseFloat(record.young_group_cost) || 0;
+            const newOlderCost = parseFloat(record.older_group_cost) || 0;
+
+            console.log('🔄 Оновлення вартості:', {
+                date: record.date,
+                young: { old: oldYoungCost, new: newYoungCost, diff: newYoungCost - oldYoungCost },
+                older: { old: oldOlderCost, new: newOlderCost, diff: newOlderCost - oldOlderCost }
+            });
+            
+            await this.applyFoodCostToPayments(
+                record.date, 
+                newYoungCost,
+                newOlderCost,
+                'update',
+                oldYoungCost,
+                oldOlderCost
+            );
+            console.log('✅ Payment_statements оновлено');
+        } catch (error) {
+            console.error('❌ Помилка оновлення payment_statements:', error);
+        }
+
         return result;
     }
 
     async deleteDailyFoodCost(request) {
         const { id } = request.params;
 
+        // Отримуємо вартість ДО видалення
         const existingRecord = await KindergartenRepository.getDailyFoodCostById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис не знайдено');
         }
+
+        const oldYoungCost = parseFloat(existingRecord[0].young_group_cost) || 0;
+        const oldOlderCost = parseFloat(existingRecord[0].older_group_cost) || 0;
+        const dateToUpdate = existingRecord[0].date;
 
         const result = await KindergartenRepository.deleteDailyFoodCost(id);
 
@@ -912,7 +958,97 @@ class KindergartenService {
             oid: '16508',
         });
 
+        // ✅ АВТООНОВЛЕННЯ: Обнулити вартість
+        try {
+            console.log('🔄 Видалення вартості - обнуляємо payment_statements для дати:', dateToUpdate);
+            await this.applyFoodCostToPayments(dateToUpdate, 0, 0, 'delete', oldYoungCost, oldOlderCost);
+            console.log('✅ Payment_statements обнулено');
+        } catch (error) {
+            console.error('❌ Помилка оновлення payment_statements:', error);
+        }
+
         return result;
+    }
+
+    // ===============================
+    // УНІВЕРСАЛЬНИЙ МЕТОД ОНОВЛЕННЯ
+    // ===============================
+
+    async applyFoodCostToPayments(date, newYoungCost, newOlderCost, action, oldYoungCost = 0, oldOlderCost = 0) {
+        const statements = await KindergartenRepository.getPaymentStatementsByDate(date);
+        
+        if (!statements || statements.length === 0) {
+            console.log('ℹ️ Немає payment_statements для дати:', date);
+            return;
+        }
+
+        console.log(`📊 Знайдено ${statements.length} записів для оновлення`);
+
+        for (const statement of statements) {
+            try {
+                const child = await KindergartenRepository.getChildById(statement.child_id);
+                
+                if (!child || child.length === 0) {
+                    console.warn(`⚠️ Дитину ${statement.child_id} не знайдено`);
+                    continue;
+                }
+
+                const groupId = child[0].group_id;
+                if (!groupId) {
+                    console.warn(`⚠️ У дитини ${statement.child_id} немає group_id`);
+                    continue;
+                }
+
+                const group = await KindergartenRepository.getGroupById(groupId);
+                if (!group || group.length === 0) {
+                    console.warn(`⚠️ Групу ${groupId} не знайдено`);
+                    continue;
+                }
+
+                const groupType = group[0].group_type;
+                const currentAmount = parseFloat(statement.payment_amount) || 0;
+                let newAmount = currentAmount;
+
+                if (action === 'create') {
+                    // При створенні: замінити поточну суму на нову вартість
+                    if (groupType === 'young') {
+                        newAmount = parseFloat(newYoungCost) || 0;
+                    } else if (groupType === 'older') {
+                        newAmount = parseFloat(newOlderCost) || 0;
+                    }
+                } else if (action === 'update') {
+                    // При оновленні: додати різницю (нова - стара)
+                    if (groupType === 'young') {
+                        const diff = (parseFloat(newYoungCost) || 0) - (parseFloat(oldYoungCost) || 0);
+                        newAmount = currentAmount + diff;
+                    } else if (groupType === 'older') {
+                        const diff = (parseFloat(newOlderCost) || 0) - (parseFloat(oldOlderCost) || 0);
+                        newAmount = currentAmount + diff;
+                    }
+                } else if (action === 'delete') {
+                    // При видаленні: обнулити або відняти стару вартість
+                    if (groupType === 'young') {
+                        newAmount = currentAmount - (parseFloat(oldYoungCost) || 0);
+                    } else if (groupType === 'older') {
+                        newAmount = currentAmount - (parseFloat(oldOlderCost) || 0);
+                    }
+                    // Не допускаємо від'ємних значень
+                    if (newAmount < 0) newAmount = 0;
+                }
+
+                // Оновлюємо payment_statement
+                await KindergartenRepository.updatePaymentStatement(statement.id, {
+                    payment_amount: newAmount
+                });
+
+                console.log(`✅ [${action}] #${statement.id}: ${currentAmount} → ${newAmount} (group: ${groupType})`);
+
+            } catch (error) {
+                console.error(`❌ Помилка оновлення statement #${statement.id}:`, error);
+            }
+        }
+
+        console.log('✅ Всі payment_statements оновлено');
     }
 
     // ===============================

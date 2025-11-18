@@ -1342,6 +1342,15 @@ class KindergartenRepository {
         return await sqlRequest(sql, values);
     }
 
+    async getPaymentStatementsByDate(date) {
+        const sql = `
+            SELECT id, date, child_id, payment_amount, created_at
+            FROM ower.payment_statements 
+            WHERE date = ?
+        `;
+        return await sqlRequest(sql, [date]);
+    }
+
     async getDailyFoodCostByDateAndGroup(date, groupName) {
         const sql = `
             SELECT 
@@ -1425,15 +1434,13 @@ class KindergartenRepository {
             offset,
             sort_by = 'child_name',
             sort_direction = 'asc',
-            month, // формат: "2025-11"
-            group_type, // 'young', 'older', або undefined для всіх
+            month,
+            group_type,
             child_name
         } = options;
 
         const values = [];
-        let paramIndex = 1;
 
-        // Конвертуємо місяць у формат для SQL
         const startDate = `${month}-01`;
         const endDate = new Date(`${month}-01T00:00:00Z`);
         endDate.setUTCMonth(endDate.getUTCMonth() + 1);
@@ -1447,7 +1454,7 @@ class KindergartenRepository {
             FROM (
                 SELECT json_build_object(
                     'id', agg.child_id,
-                    'month', $${paramIndex},
+                    'month', CAST(? AS TEXT),
                     'child_id', agg.child_id,
                     'child_name', cr.child_name,
                     'parent_name', cr.parent_name,
@@ -1467,30 +1474,25 @@ class KindergartenRepository {
                         SUM(ps.payment_amount) as total_amount,
                         COUNT(ps.id) as attendance_days
                     FROM ower.payment_statements ps
-                    WHERE ps.date >= $${paramIndex + 1}::date AND ps.date < $${paramIndex + 2}::date
+                    WHERE ps.date >= CAST(? AS DATE) 
+                    AND ps.date < CAST(? AS DATE)
                     GROUP BY ps.child_id
                 ) agg ON agg.child_id = cr.id
                 WHERE 1=1
         `;
 
         values.push(month, startDate, endDateStr);
-        paramIndex += 3;
 
-        // Фільтр по типу групи
         if (group_type) {
-            sql += ` AND kg.group_type = $${paramIndex}`;
+            sql += ` AND kg.group_type = ?`;
             values.push(group_type);
-            paramIndex++;
         }
 
-        // Фільтр по імені дитини
         if (child_name) {
-            sql += ` AND cr.child_name ILIKE $${paramIndex}`;
+            sql += ` AND cr.child_name ILIKE ?`;
             values.push(`%${child_name}%`);
-            paramIndex++;
         }
 
-        // Сортування
         const allowedSortFields = ['child_name', 'group_name', 'total_amount', 'attendance_days'];
         const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'child_name';
         const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'ASC';
@@ -1505,8 +1507,7 @@ class KindergartenRepository {
             sql += ` ORDER BY COALESCE(agg.attendance_days, 0) ${validSortDirection}`;
         }
         
-        // Пагінація
-        sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        sql += ` LIMIT ? OFFSET ?`;
         values.push(limit, offset);
         
         sql += `) q`;
@@ -1526,9 +1527,9 @@ class KindergartenRepository {
                 SUM(ps.payment_amount) as total_amount,
                 COUNT(ps.id) as attendance_days
             FROM ower.payment_statements ps
-            WHERE ps.child_id = $1 
-                AND ps.date >= $2 
-                AND ps.date < $3
+            WHERE ps.child_id = ? 
+                AND ps.date >= CAST(? AS DATE)
+                AND ps.date < CAST(? AS DATE)
             GROUP BY ps.child_id
         `;
         
