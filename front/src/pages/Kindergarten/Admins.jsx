@@ -66,6 +66,9 @@ const Admins = () => {
         }
     });
 
+    // ✅ ДОДАНО: Стан для списку садочків
+    const [kindergartensData, setKindergartensData] = useState([]);
+
     const isFirstAPI = useRef(true);
     const {error, status, data, retryFetch} = useFetch('api/kindergarten/admins/filter', {
         method: 'post',
@@ -86,6 +89,40 @@ const Admins = () => {
             data: stateAdmins.sendData
         });
     }, [stateAdmins.sendData, retryFetch]);
+
+    // ✅ ДОДАНО: Завантажуємо унікальні назви садочків
+    useEffect(() => {
+        const loadKindergartens = async () => {
+            try {
+                const response = await fetchFunction('api/kindergarten/groups/filter', {
+                    method: 'POST',
+                    data: { limit: 1000, page: 1 }
+                });
+                
+                if (response?.data && Array.isArray(response.data.items)) {
+                    // Отримуємо унікальні назви садочків
+                    const uniqueKindergartens = [...new Set(
+                        response.data.items
+                            .map(group => group.kindergarten_name)
+                            .filter(name => name) // Прибираємо null/undefined
+                    )];
+                    
+                    const kindergartenOptions = uniqueKindergartens.map(name => ({
+                        value: name,
+                        label: name
+                    }));
+                    
+                    setKindergartensData(kindergartenOptions);
+                } else {
+                    setKindergartensData([]);
+                }
+            } catch (error) {
+                console.error('Error loading kindergartens:', error);
+                setKindergartensData([]);
+            }
+        };
+        loadKindergartens();
+    }, []);
 
     const getSortIcon = useCallback((columnName) => {
         if (stateAdmins.sendData.sort_by === columnName) {
@@ -210,12 +247,13 @@ const Admins = () => {
             return;
         }
 
-        if (!kindergarten_name.trim()) {
+        // ✅ ОНОВЛЕНО: Перевірка для селектора
+        if (!kindergarten_name || !kindergarten_name.trim()) {
             notification({
                 type: 'warning',
                 placement: 'top',
                 title: 'Помилка',
-                message: 'Будь ласка, введіть назву садочка',
+                message: 'Будь ласка, оберіть садочок',
             });
             return;
         }
@@ -229,7 +267,10 @@ const Admins = () => {
                     data: {
                         phone_number: phone_number.trim(),
                         full_name: full_name.trim(),
-                        kindergarten_name: kindergarten_name.trim(),
+                        // ✅ ОНОВЛЕНО: Обробка значення селектора
+                        kindergarten_name: typeof kindergarten_name === 'string' 
+                            ? kindergarten_name.trim() 
+                            : kindergarten_name,
                         role: role
                     }
                 });
@@ -246,7 +287,10 @@ const Admins = () => {
                     data: {
                         phone_number: phone_number.trim(),
                         full_name: full_name.trim(),
-                        kindergarten_name: kindergarten_name.trim(),
+                        // ✅ ОНОВЛЕНО: Обробка значення селектора
+                        kindergarten_name: typeof kindergarten_name === 'string' 
+                            ? kindergarten_name.trim() 
+                            : kindergarten_name,
                         role: role
                     }
                 });
@@ -578,7 +622,7 @@ const Admins = () => {
                                     icon={addIcon}
                                     className="btn--primary"
                                 >
-                                    Додати адміністратора
+                                    Додати працівника
                                 </Button>
                                 
                                 <Dropdown
@@ -699,7 +743,7 @@ const Admins = () => {
                                 confirmLoading={modalState.loading}
                                 cancelText="Скасувати"
                                 okText={modalState.mode === 'create' ? 'Створити' : 'Зберегти'}
-                                title={modalState.mode === 'create' ? 'Додати адміністратора' : 'Редагувати адміністратора'}
+                                title={modalState.mode === 'create' ? 'Додати працівника' : 'Редагувати адміністратора'}
                             >
                                 <div className="modal-input-wrapper">
                                     <div className="modal-input-item">
@@ -724,13 +768,19 @@ const Admins = () => {
                                         />
                                     </div>
 
+                                    {/* ✅ ЗМІНЕНО: Input замінено на Select */}
                                     <div className="modal-input-item">
                                         <h4 className="input-description">Назва садочка</h4>
-                                        <Input
-                                            placeholder="Введіть назву садочка"
+                                        <Select
+                                            placeholder={kindergartensData.length > 0 ? "Оберіть садочок" : "Завантаження..."}
                                             name="kindergarten_name"
-                                            value={modalState.formData.kindergarten_name}
-                                            onChange={handleInputChange}
+                                            options={kindergartensData}
+                                            value={modalState.formData.kindergarten_name ? 
+                                                kindergartensData.find(k => k.value === modalState.formData.kindergarten_name) || null
+                                                : null
+                                            }
+                                            onChange={(selectedOption) => handleSelectChange('kindergarten_name', selectedOption?.value || '')}
+                                            style={dropDownStyle}
                                             required
                                         />
                                     </div>

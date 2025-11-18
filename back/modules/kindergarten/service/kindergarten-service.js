@@ -36,7 +36,7 @@ class KindergartenService {
             limit = 16, 
             sort_by = 'id', 
             sort_direction = 'desc',
-            
+            kindergarten_name,  // ✅ ДОДАНО: витягуємо з request
             group_name,
             group_type,
             ...whereConditions 
@@ -44,7 +44,9 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        if (group_name || group_type) {
+        // Логування пошуку якщо є хоча б один фільтр
+        // ✅ ЗМІНЕНО: додано kindergarten_name до умови
+        if (kindergarten_name || group_name || group_type) {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request?.user?.id,
@@ -60,12 +62,13 @@ class KindergartenService {
             });
         }
 
+        // ✅ ЗМІНЕНО: додано передачу kindergarten_name до Repository
         const userData = await KindergartenRepository.findGroupsByFilter({
             limit,
             offset,
             sort_by,
             sort_direction,
-            
+            kindergarten_name,  // ✅ ДОДАНО
             group_name,
             group_type,
             ...whereConditions
@@ -1841,6 +1844,98 @@ class KindergartenService {
         });
 
         return result;
+    }
+
+    async findMonthlyPaymentStatements(request) {
+        const { 
+            page = 1, 
+            limit = 16, 
+            sort_by = 'child_name', 
+            sort_direction = 'asc',
+            month, // "2025-11"
+            group_type, // 'young', 'older', або undefined
+            child_name,
+            ...whereConditions 
+        } = request.body;
+
+        const { offset } = paginate(page, limit);
+        
+        // Якщо місяць не вказано, використовуємо поточний
+        const currentMonth = month || new Date().toISOString().slice(0, 7);
+        
+        if (child_name || group_type) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request?.user?.id,
+                action: 'SEARCH',
+                client_addr: request?.ip,
+                application_name: 'Пошук місячної виписки по оплаті',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'payment_statements',
+                oid: '16509',
+            });
+        }
+
+        const userData = await KindergartenRepository.findMonthlyPaymentStatements({
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            month: currentMonth,
+            group_type,
+            child_name,
+            ...whereConditions
+        });
+
+        return paginationData(userData[0], page, limit);
+    }
+
+    // Оновити метод updatePaymentStatement для підтримки місячного оновлення
+    async updateMonthlyPaymentStatement(request) {
+        const { id } = request.params; // це буде child_id
+        const { total_amount, month } = request.body;
+
+        const existingChild = await KindergartenRepository.getChildById(id);
+        if (!existingChild || existingChild.length === 0) {
+            throw new Error('Дитину не знайдено');
+        }
+
+        // Отримуємо всі payment_statements для цієї дитини за місяць
+        const startDate = `${month}-01`;
+        const endDate = new Date(month + '-01');
+        endDate.setMonth(endDate.getMonth() + 1);
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        const existingStatements = await KindergartenRepository.getMonthlyPaymentStatement(
+            month,
+            id
+        );
+
+        if (!existingStatements || existingStatements.length === 0) {
+            throw new Error('Записи за цей місяць не знайдено');
+        }
+
+        // Тут можна реалізувати логіку оновлення всіх записів за місяць
+        // або створити новий підхід до зберігання місячних сум
+
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'UPDATE',
+            client_addr: request?.ip,
+            application_name: 'Оновлення місячної виписки по оплаті',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'payment_statements',
+            oid: '16509',
+        });
+
+        return { success: true, total_amount };
     }
 }
 

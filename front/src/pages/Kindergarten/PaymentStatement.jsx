@@ -27,6 +27,7 @@ const searchIcon = generateIcon(iconMap.search, 'input-icon', 'currentColor', 16
 const dropDownIcon = generateIcon(iconMap.arrowDown, null, 'currentColor', 20, 20)
 const sortUpIcon = generateIcon(iconMap.arrowUp, 'sort-icon', 'currentColor', 14, 14)
 const sortDownIcon = generateIcon(iconMap.arrowDown, 'sort-icon', 'currentColor', 14, 14)
+const groupIcon = generateIcon(iconMap.filter, null, 'currentColor', 20, 20)
 const dropDownStyle = {width: '100%'}
 const childDropDownStyle = {justifyContent: 'center'}
 
@@ -38,6 +39,7 @@ const savePaymentStatementState = (state) => {
             sendData: state.sendData,
             selectData: state.selectData,
             isFilterOpen: state.isFilterOpen,
+            groupFilter: state.groupFilter,
             timestamp: Date.now()
         }));
     } catch (error) {
@@ -76,8 +78,17 @@ const PaymentStatement = () => {
     const editModalNodeRef = useRef(null)
     const deleteModalNodeRef = useRef(null)
     
+    // Отримуємо поточний місяць та рік
+    const getCurrentMonthYear = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
+    };
+
     const [statePayment, setStatePayment] = useState(() => {
         const savedState = loadPaymentStatementState();
+        const currentMonthYear = getCurrentMonthYear();
         
         if (savedState) {
             return {
@@ -85,11 +96,13 @@ const PaymentStatement = () => {
                 selectData: savedState.selectData || {},
                 confirmLoading: false,
                 itemId: null,
+                groupFilter: savedState.groupFilter || 'all', // 'all', 'young', 'older'
                 sendData: savedState.sendData || {
                     limit: 16,
                     page: 1,
-                    sort_by: 'date',
-                    sort_direction: 'desc',
+                    sort_by: 'child_name',
+                    sort_direction: 'asc',
+                    month: currentMonthYear
                 }
             };
         }
@@ -99,11 +112,13 @@ const PaymentStatement = () => {
             selectData: {},
             confirmLoading: false,
             itemId: null,
+            groupFilter: 'all',
             sendData: {
                 limit: 16,
                 page: 1,
-                sort_by: 'date',
-                sort_direction: 'desc',
+                sort_by: 'child_name',
+                sort_direction: 'asc',
+                month: currentMonthYear
             }
         };
     });
@@ -122,15 +137,18 @@ const PaymentStatement = () => {
         loading: false,
         statementId: null,
         childName: '',
-        date: ''
+        month: ''
     });
 
     const [groupsData, setGroupsData] = useState([]);
 
     const isFirstAPI = useRef(true);
-    const {error, status, data, retryFetch} = useFetch('api/kindergarten/payment_statements/filter', {
+    const {error, status, data, retryFetch} = useFetch('api/kindergarten/payment_statements/monthly', {
         method: 'post',
-        data: statePayment.sendData
+        data: {
+            ...statePayment.sendData,
+            group_type: statePayment.groupFilter !== 'all' ? statePayment.groupFilter : undefined
+        }
     })
     
     const startRecord = ((statePayment.sendData.page || 1) - 1) * statePayment.sendData.limit + 1;
@@ -142,11 +160,14 @@ const PaymentStatement = () => {
             return;
         }
         
-        retryFetch('api/kindergarten/payment_statements/filter', {
+        retryFetch('api/kindergarten/payment_statements/monthly', {
             method: 'post',
-            data: statePayment.sendData
+            data: {
+                ...statePayment.sendData,
+                group_type: statePayment.groupFilter !== 'all' ? statePayment.groupFilter : undefined
+            }
         });
-    }, [statePayment.sendData, retryFetch]);
+    }, [statePayment.sendData, statePayment.groupFilter, retryFetch]);
 
     useEffect(() => {
         const loadGroups = async () => {
@@ -221,25 +242,38 @@ const PaymentStatement = () => {
         });
     };
 
+    const formatMonth = (monthStr) => {
+        if (!monthStr) return '-';
+        const [year, month] = monthStr.split('-');
+        const months = [
+            'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+            'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+        ];
+        return `${months[parseInt(month) - 1]} ${year}`;
+    };
+
     const columnTable = useMemo(() => [
-        createSortableColumn('ID', 'id', null, '80px'),
-        createSortableColumn('Дата', 'date', (value) => {
-            if (!value) return '-';
-            const date = new Date(value);
-            return date.toLocaleDateString('uk-UA');
-        }, '120px'),
+        createSortableColumn('Місяць', 'month', (value) => {
+            return formatMonth(value);
+        }, '150px'),
         createSortableColumn('ПІБ дитини', 'child_name', null, '200px'),
         {
             title: 'Група',
             dataIndex: 'group_name',
             width: '150px'
         },
-        createSortableColumn('Сума оплати', 'payment_amount', (value) => {
-            if (!value || value === 0) return '-';
+        createSortableColumn('Сума оплати', 'total_amount', (value) => {
+            if (!value || value === 0) return '0.00 ₴';
             return `${parseFloat(value).toFixed(2)} ₴`;
         }, '120px'),
         {
-            title: 'Дія',
+            title: 'Днів відвідування',
+            dataIndex: 'attendance_days',
+            width: '120px',
+            render: (value) => value || 0
+        },
+        {
+            title: 'Дії',
             dataIndex: 'action',
             width: '120px',
             render: (_, record) => (
@@ -264,13 +298,15 @@ const PaymentStatement = () => {
             return data.items.map((el) => ({
                 key: el.id,
                 id: el.id,
-                date: el.date,
+                month: el.month,
                 child_id: el.child_id,
                 child_name: el.child_name,
                 parent_name: el.parent_name,
                 group_id: el.group_id,
                 group_name: el.group_name,
-                payment_amount: el.payment_amount,
+                group_type: el.group_type,
+                total_amount: el.total_amount,
+                attendance_days: el.attendance_days,
                 created_at: el.created_at
             }))
         }
@@ -328,6 +364,39 @@ const PaymentStatement = () => {
         },
     ]
 
+    const handleGroupFilterToggle = () => {
+        setStatePayment(prevState => {
+            let newFilter = 'all';
+            if (prevState.groupFilter === 'all') {
+                newFilter = 'young';
+            } else if (prevState.groupFilter === 'young') {
+                newFilter = 'older';
+            } else {
+                newFilter = 'all';
+            }
+            
+            return {
+                ...prevState,
+                groupFilter: newFilter,
+                sendData: {
+                    ...prevState.sendData,
+                    page: 1
+                }
+            };
+        });
+    };
+
+    const getGroupFilterLabel = () => {
+        switch (statePayment.groupFilter) {
+            case 'young':
+                return 'Молодша група';
+            case 'older':
+                return 'Старша група';
+            default:
+                return 'Всі групи';
+        }
+    };
+
     const filterHandleClick = () => {
         setStatePayment(prevState => ({
             ...prevState,
@@ -365,14 +434,15 @@ const PaymentStatement = () => {
         if (Object.values(statePayment.selectData).some(Boolean)) {
             setStatePayment((prev) => ({ ...prev, selectData: {} }));
         }
-        if (!hasOnlyAllowedParams(statePayment.sendData, ['limit', 'page', 'sort_by', 'sort_direction'])) {
+        if (!hasOnlyAllowedParams(statePayment.sendData, ['limit', 'page', 'sort_by', 'sort_direction', 'month'])) {
             setStatePayment((prev) => ({
                 ...prev,
                 sendData: { 
                     limit: prev.sendData.limit, 
                     page: 1,
-                    sort_by: 'date',
-                    sort_direction: 'desc'
+                    sort_by: 'child_name',
+                    sort_direction: 'asc',
+                    month: getCurrentMonthYear()
                 },
                 isFilterOpen: false
             }));
@@ -424,7 +494,7 @@ const PaymentStatement = () => {
             loading: false,
             statementId: record.id,
             formData: {
-                payment_amount: record.payment_amount || ''
+                payment_amount: record.total_amount || ''
             }
         });
         document.body.style.overflow = 'hidden';
@@ -464,7 +534,7 @@ const PaymentStatement = () => {
             await fetchFunction(`api/kindergarten/payment_statements/${editModalState.statementId}`, {
                 method: 'PUT',
                 data: {
-                    payment_amount: parseFloat(payment_amount)
+                    total_amount: parseFloat(payment_amount)
                 }
             });
 
@@ -477,9 +547,12 @@ const PaymentStatement = () => {
 
             closeEditModal();
             
-            retryFetch('api/kindergarten/payment_statements/filter', {
+            retryFetch('api/kindergarten/payment_statements/monthly', {
                 method: 'post',
-                data: statePayment.sendData,
+                data: {
+                    ...statePayment.sendData,
+                    group_type: statePayment.groupFilter !== 'all' ? statePayment.groupFilter : undefined
+                }
             });
 
         } catch (error) {
@@ -500,7 +573,7 @@ const PaymentStatement = () => {
             loading: false,
             statementId: record.id,
             childName: record.child_name,
-            date: new Date(record.date).toLocaleDateString('uk-UA')
+            month: formatMonth(record.month)
         });
         document.body.style.overflow = 'hidden';
     };
@@ -522,14 +595,17 @@ const PaymentStatement = () => {
                 type: 'success',
                 placement: 'top',
                 title: 'Успіх',
-                message: 'Виписку успішно видалено',
+                message: 'Випискцу успішно видалено',
             });
 
             closeDeleteModal();
             
-            retryFetch('api/kindergarten/payment_statements/filter', {
+            retryFetch('api/kindergarten/payment_statements/monthly', {
                 method: 'post',
-                data: statePayment.sendData,
+                data: {
+                    ...statePayment.sendData,
+                    group_type: statePayment.groupFilter !== 'all' ? statePayment.groupFilter : undefined
+                }
             });
 
         } catch (error) {
@@ -570,6 +646,15 @@ const PaymentStatement = () => {
                             </h2>
                             
                             <div className="table-header__buttons">
+                                <Button
+                                    className={`btn--secondary`}
+                                    onClick={handleGroupFilterToggle}
+                                    icon={groupIcon}
+                                    title="Переключити тип групи"
+                                >
+                                    {getGroupFilterLabel()}
+                                </Button>
+                                
                                 <Dropdown
                                     icon={dropDownIcon}
                                     iconPosition="right"
@@ -659,7 +744,7 @@ const PaymentStatement = () => {
                         title="Підтвердження видалення"
                     >
                         <p>
-                            Ви впевнені, що хочете видалити виписку для дитини <strong>{deleteModalState.childName}</strong> за дату <strong>{deleteModalState.date}</strong>?
+                            Ви впевнені, що хочете видалити виписку для дитини <strong>{deleteModalState.childName}</strong> за місяць <strong>{deleteModalState.month}</strong>?
                         </p>
                     </Modal>
                 )}

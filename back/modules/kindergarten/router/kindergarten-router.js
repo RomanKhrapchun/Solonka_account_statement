@@ -43,6 +43,7 @@ const {
     paymentStatementUpdateSchema,
     paymentStatementDeleteSchema,
     paymentStatementInfoSchema,
+    paymentStatementMonthlyFilterSchema,
     
 } = require('../schema/kindergarten-schema');
 
@@ -260,7 +261,7 @@ const routes = async (fastify) => {
         preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.verifyEducator);
 
-        // ===============================
+    // ===============================
     // РОУТИ ДЛЯ ВИПИСКИ ПО ОПЛАТІ
     // ===============================
 
@@ -299,6 +300,11 @@ const routes = async (fastify) => {
     fastify.post("/billing/parse-pdf", { 
         preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.parseBillingPDF);
+
+    fastify.post("/payment_statements/monthly", { 
+        schema: paymentStatementMonthlyFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
+    }, kindergartenController.findMonthlyPaymentStatements);
 
 }
 

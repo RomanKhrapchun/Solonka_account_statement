@@ -218,13 +218,14 @@ const KindergartenGroups = () => {
 
     const columnTable = useMemo(() => {
         let columns = [
+            createSortableColumn('Назва садочка', 'kindergarten_name', null, '150px'),
             createSortableColumn('Назва групи', 'group_name', null, '150px'),
             createSortableColumn('Тип групи', 'group_type', (value) => {
                 const typeLabels = {
                     'young': 'Молодша',
                     'older': 'Старша'
                 };
-                return typeLabels[value] || value; // Просто текст без стилізації
+                return typeLabels[value] || value;
             }, '120px'),
             {
                 title: 'Дія',
@@ -262,6 +263,7 @@ const KindergartenGroups = () => {
             return data.items.map((el) => ({
                 key: el.id,
                 id: el.id,
+                kindergarten_name: el.kindergarten_name,
                 group_name: el.group_name,
                 group_type: el.group_type,
             }));

@@ -1036,6 +1036,19 @@ class KindergartenController {
             });
         }
     }
+
+    async findMonthlyPaymentStatements(request, reply) {
+        try {
+            const data = await kindergartenService.findMonthlyPaymentStatements(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch monthly payment statements',
+                message: error.message 
+            });
+        }
+    }
 }
 
 module.exports = new KindergartenController();

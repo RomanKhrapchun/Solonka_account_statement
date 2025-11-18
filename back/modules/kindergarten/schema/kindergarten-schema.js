@@ -979,6 +979,43 @@ const paymentStatementDeleteSchema = {
     }
 };
 
+const paymentStatementMonthlyFilterSchema = {
+    body: {
+        page: {
+            type: 'number',
+            optional: true,
+        },
+        limit: {
+            type: 'number',
+            optional: true,
+        },
+        sort_by: {
+            type: 'string',
+            optional: true,
+        },
+        sort_direction: {
+            type: 'string',
+            optional: true,
+        },
+        month: {
+            type: 'string',
+            optional: true,
+            pattern: '^\\d{4}-\\d{2}$', // формат: "2025-11"
+        },
+        group_type: {
+            type: 'string',
+            optional: true,
+            enum: ['young', 'older'],
+        },
+        child_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+    }
+};
+
+
 module.exports = {
     // Групи
     kindergartenGroupFilterSchema,
@@ -1033,4 +1070,5 @@ module.exports = {
     paymentStatementUpdateSchema,
     paymentStatementDeleteSchema,
     paymentStatementInfoSchema,
+    paymentStatementMonthlyFilterSchema,
 };

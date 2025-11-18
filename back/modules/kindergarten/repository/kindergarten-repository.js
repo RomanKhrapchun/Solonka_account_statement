@@ -77,7 +77,7 @@ class KindergartenRepository {
             offset,
             sort_by = 'id',
             sort_direction = 'desc',
-            
+            kindergarten_name,  // ✅ ДОДАНО: параметр для фільтрації
             group_name,
             group_type
         } = options;
@@ -100,6 +100,12 @@ class KindergartenRepository {
         `;
 
         // Додаємо фільтри
+        
+        // ✅ ДОДАНО: Фільтр по назві садочка
+        if (kindergarten_name) {
+            sql += ` AND kg.kindergarten_name ILIKE ?`;
+            values.push(`%${kindergarten_name}%`);
+        }
 
         if (group_name) {
             sql += ` AND kg.group_name ILIKE ?`;
@@ -112,7 +118,8 @@ class KindergartenRepository {
         }
 
         // Додаємо сортування
-        const allowedSortFields = ['id', 'group_name', 'group_type', 'created_at'];
+        // ✅ ЗМІНЕНО: Додано 'kindergarten_name' до списку дозволених полів для сортування
+        const allowedSortFields = ['id', 'kindergarten_name', 'group_name', 'group_type', 'created_at'];
         const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'id';
         const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'DESC';
         
@@ -126,7 +133,7 @@ class KindergartenRepository {
 
         return await sqlRequest(sql, values);
     }
-
+    
     async getGroupByName(groupName, excludeId = null) {
         let sql = `
             SELECT id, group_name, group_type 
@@ -1410,6 +1417,122 @@ class KindergartenRepository {
         `;
         
         return await sqlRequest(sql, [date]);
+    }
+
+    async findMonthlyPaymentStatements(options) {
+        const {
+            limit,
+            offset,
+            sort_by = 'child_name',
+            sort_direction = 'asc',
+            month, // формат: "2025-11"
+            group_type, // 'young', 'older', або undefined для всіх
+            child_name
+        } = options;
+
+        const values = [];
+        let paramIndex = 1;
+
+        // Конвертуємо місяць у формат для SQL
+        const startDate = `${month}-01`;
+        const endDate = new Date(`${month}-01T00:00:00Z`);
+        endDate.setUTCMonth(endDate.getUTCMonth() + 1);
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        console.log('📅 Date conversion:', { month, startDate, endDateStr });
+
+        let sql = `
+            SELECT json_agg(rw) as data,
+                max(cnt) as count
+            FROM (
+                SELECT json_build_object(
+                    'id', agg.child_id,
+                    'month', $${paramIndex},
+                    'child_id', agg.child_id,
+                    'child_name', cr.child_name,
+                    'parent_name', cr.parent_name,
+                    'group_id', cr.group_id,
+                    'group_name', kg.group_name,
+                    'group_type', kg.group_type,
+                    'total_amount', COALESCE(agg.total_amount, 0),
+                    'attendance_days', COALESCE(agg.attendance_days, 0),
+                    'created_at', NOW()
+                ) as rw,
+                count(*) over () as cnt
+                FROM ower.children_roster cr
+                LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+                LEFT JOIN (
+                    SELECT 
+                        ps.child_id,
+                        SUM(ps.payment_amount) as total_amount,
+                        COUNT(ps.id) as attendance_days
+                    FROM ower.payment_statements ps
+                    WHERE ps.date >= $${paramIndex + 1}::date AND ps.date < $${paramIndex + 2}::date
+                    GROUP BY ps.child_id
+                ) agg ON agg.child_id = cr.id
+                WHERE 1=1
+        `;
+
+        values.push(month, startDate, endDateStr);
+        paramIndex += 3;
+
+        // Фільтр по типу групи
+        if (group_type) {
+            sql += ` AND kg.group_type = $${paramIndex}`;
+            values.push(group_type);
+            paramIndex++;
+        }
+
+        // Фільтр по імені дитини
+        if (child_name) {
+            sql += ` AND cr.child_name ILIKE $${paramIndex}`;
+            values.push(`%${child_name}%`);
+            paramIndex++;
+        }
+
+        // Сортування
+        const allowedSortFields = ['child_name', 'group_name', 'total_amount', 'attendance_days'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'child_name';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'ASC';
+        
+        if (validSortBy === 'child_name') {
+            sql += ` ORDER BY cr.child_name ${validSortDirection}`;
+        } else if (validSortBy === 'group_name') {
+            sql += ` ORDER BY kg.group_name ${validSortDirection}`;
+        } else if (validSortBy === 'total_amount') {
+            sql += ` ORDER BY COALESCE(agg.total_amount, 0) ${validSortDirection}`;
+        } else if (validSortBy === 'attendance_days') {
+            sql += ` ORDER BY COALESCE(agg.attendance_days, 0) ${validSortDirection}`;
+        }
+        
+        // Пагінація
+        sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        values.push(limit, offset);
+        
+        sql += `) q`;
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getMonthlyPaymentStatement(month, childId) {
+        const startDate = `${month}-01`;
+        const endDate = new Date(month + '-01');
+        endDate.setMonth(endDate.getMonth() + 1);
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        const sql = `
+            SELECT 
+                ps.child_id,
+                SUM(ps.payment_amount) as total_amount,
+                COUNT(ps.id) as attendance_days
+            FROM ower.payment_statements ps
+            WHERE ps.child_id = $1 
+                AND ps.date >= $2 
+                AND ps.date < $3
+            GROUP BY ps.child_id
+        `;
+        
+        return await sqlRequest(sql, [childId, startDate, endDateStr]);
     }
 }
 
