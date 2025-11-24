@@ -2073,6 +2073,156 @@ class KindergartenService {
 
         return { success: true, total_amount };
     }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ
+    // ===============================
+
+    async findPastAttendanceByFilter(request) {
+        const { 
+            page = 1, 
+            limit = 16, 
+            sort_by = 'date', 
+            sort_direction = 'desc',
+            date_from,
+            date_to,
+            child_name,
+            group_name,
+            kindergarten_name,
+            attendance_status,
+            ...whereConditions 
+        } = request.body;
+
+        const { offset } = paginate(page, limit);
+        
+        if (date_from || date_to || child_name || group_name || kindergarten_name || attendance_status) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request?.user?.id,
+                action: 'SEARCH',
+                client_addr: request?.ip,
+                application_name: 'Пошук архівних відвідувань',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'past_attendance',
+                oid: '16510',
+            });
+        }
+
+        const userData = await KindergartenRepository.findPastAttendanceByFilter({
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            date_from,
+            date_to,
+            child_name,
+            group_name,
+            kindergarten_name,
+            attendance_status,
+            ...whereConditions
+        });
+
+        return paginationData(userData[0], page, limit);
+    }
+
+    async getPastAttendanceById(request) {
+        const { id } = request.params;
+        
+        const attendanceData = await KindergartenRepository.getPastAttendanceById(id);
+        if (!attendanceData || attendanceData.length === 0) {
+            throw new Error('Архівний запис відвідуваності не знайдено');
+        }
+
+        return attendanceData[0];
+    }
+
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ (PAST_ATTENDANCE)
+    // ===============================
+
+    async findPastAttendanceByFilter(request) {
+        const { 
+            page = 1, 
+            limit = 16, 
+            sort_by = 'child_name', 
+            sort_direction = 'asc',
+            child_name,
+            group_name,
+            kindergarten_name,
+            date,
+            attendance_status,
+            ...whereConditions 
+        } = request.body;
+
+        const { offset } = paginate(page, limit);
+        
+        // Для архівних відвідувань - якщо дата не вказана, використовуємо вчорашню дату
+        let filterDate = date;
+        if (!filterDate) {
+            const yesterday = new Date();
+            const ukraineTime = new Date(yesterday.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
+            ukraineTime.setDate(ukraineTime.getDate() - 1);
+            filterDate = ukraineTime.toISOString().split('T')[0];
+        }
+        
+        if (child_name || group_name || kindergarten_name || attendance_status) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request?.user?.id,
+                action: 'SEARCH',
+                client_addr: request?.ip,
+                application_name: 'Пошук архівних відвідувань',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'past_attendance',
+                oid: '16510',
+            });
+        }
+
+        const userData = await KindergartenRepository.findPastAttendanceByFilter({
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            child_name,
+            group_name,
+            kindergarten_name,
+            date: filterDate,
+            attendance_status,
+            ...whereConditions
+        });
+
+        return paginationData(userData[0], page, limit);
+    }
+
+    async getPastAttendanceById(request) {
+        const { id } = request.params;
+        
+        const attendanceData = await KindergartenRepository.getPastAttendanceById(id);
+        if (!attendanceData || attendanceData.length === 0) {
+            throw new Error('Запис архівної відвідуваності не знайдено');
+        }
+
+        return attendanceData[0];
+    }
+
+    async archiveYesterdayAttendance() {
+        try {
+            console.log('🗄️ Запуск архівування відвідувань за вчора...');
+            await KindergartenRepository.archiveYesterdayAttendance();
+            console.log('✅ Архівування завершено успішно');
+            return { success: true, message: 'Архівування завершено' };
+        } catch (error) {
+            console.error('❌ Помилка архівування:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new KindergartenService();

@@ -1049,6 +1049,88 @@ class KindergartenController {
             });
         }
     }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ
+    // ===============================
+
+    async findPastAttendanceByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findPastAttendanceByFilter(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch past attendance',
+                message: error.message 
+            });
+        }
+    }
+
+    async getPastAttendanceById(request, reply) {
+        try {
+            const data = await kindergartenService.getPastAttendanceById(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to get past attendance',
+                message: error.message 
+            });
+        }
+    }
+
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ (PAST_ATTENDANCE)
+    // ===============================
+
+    async findPastAttendanceByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findPastAttendanceByFilter(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({
+                error: 'Failed to fetch past attendance',
+                message: error.message
+            });
+        }
+    }
+
+    async getPastAttendanceById(request, reply) {
+        try {
+            const data = await kindergartenService.getPastAttendanceById(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(404).send({
+                error: 'Past attendance not found',
+                message: error.message
+            });
+        }
+    }
+
+    async archiveYesterdayAttendance(request, reply) {
+        try {
+            const result = await kindergartenService.archiveYesterdayAttendance();
+            reply.status(200).send(result);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(500).send({ 
+                error: 'Failed to archive attendance',
+                message: error.message 
+            });
+        }
+    }
 }
 
 module.exports = new KindergartenController();

@@ -1015,6 +1015,69 @@ const paymentStatementMonthlyFilterSchema = {
     }
 };
 
+// ===============================
+// СХЕМИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ
+// ===============================
+
+const pastAttendanceInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        },
+    }
+};
+
+const pastAttendanceFilterSchema = {
+    body: {
+        page: {
+            type: 'number',
+            optional: true,
+        },
+        limit: {
+            type: 'number', 
+            optional: true,
+        },
+        sort_by: {
+            type: 'string',
+            optional: true,
+        },
+        sort_direction: {
+            type: 'string',
+            optional: true,
+        },
+        child_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        group_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        kindergarten_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        date_from: {
+            type: 'string',
+            optional: true,
+            format: 'date',
+        },
+        date_to: {
+            type: 'string',
+            optional: true,
+            format: 'date',
+        },
+        attendance_status: {
+            type: 'string',
+            optional: true,
+            enum: ['present', 'absent', 'sick', 'vacation'],
+        },
+    }
+};
 
 module.exports = {
     // Групи
@@ -1071,4 +1134,8 @@ module.exports = {
     paymentStatementDeleteSchema,
     paymentStatementInfoSchema,
     paymentStatementMonthlyFilterSchema,
+    
+    //Архівні відвідування
+    pastAttendanceInfoSchema,
+    pastAttendanceFilterSchema,
 };

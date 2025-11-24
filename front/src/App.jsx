@@ -75,6 +75,7 @@ const DailyFoodCost = lazy(() => import('./pages/Kindergarten/DailyFoodCost.jsx'
 const KindergartenBilling = lazy(() => import('./pages/Kindergarten/KindergartenBilling.jsx'));
 const Admins = lazy(() => import('./pages/Kindergarten/Admins'));
 const PaymentStatement = lazy(() => import('./pages/Kindergarten/PaymentStatement'));
+const PastAttendance = lazy(() => import('./pages/Kindergarten/PastAttendance.jsx'));
 // Sports complex
 const SportsRequisite = lazy(() => import('./pages/SportsСomplex/Requisite.jsx'));
 const SportsBills = lazy(() => import('./pages/SportsСomplex/Bills.jsx'));
@@ -171,6 +172,7 @@ function App() {
                     <Route exact path="kindergarten/billing" element={<Suspense fallback={<Loader/>}><KindergartenBilling /></Suspense>} />
                     <Route exact path="kindergarten/admins" element={<Suspense fallback={<Loader/>}><Admins /></Suspense>} />
                     <Route exact path="kindergarten/payment_statements" element={<Suspense fallback={<Loader/>}><PaymentStatement /></Suspense>} />
+                    <Route exact path="kindergarten/past_attendance" element={<Suspense fallback={<Loader/>}><PastAttendance /></Suspense>} />
                     {/* Districts Routes */}
                     <Route exact path="districts" element={<Suspense fallback={<Loader />}><DistrictsPage /></Suspense>} />
                     <Route exact path="districts/:districtId" element={<Suspense fallback={<Loader />}><DistrictList /></Suspense>} />

@@ -1535,6 +1535,258 @@ class KindergartenRepository {
         
         return await sqlRequest(sql, [childId, startDate, endDateStr]);
     }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ
+    // ===============================
+
+    async findPastAttendanceByFilter(options) {
+        const {
+            limit,
+            offset,
+            sort_by = 'date',
+            sort_direction = 'desc',
+            date_from,
+            date_to,
+            child_name,
+            group_name,
+            kindergarten_name,
+            attendance_status
+        } = options;
+
+        const values = [];
+        let sql = `
+            SELECT json_agg(rw) as data,
+                max(cnt) as count
+            FROM (
+                SELECT json_build_object(
+                    'id', pa.id,
+                    'date', pa.date,
+                    'child_id', pa.child_id,
+                    'child_name', cr.child_name,
+                    'parent_name', cr.parent_name,
+                    'group_id', cr.group_id,
+                    'group_name', kg.group_name,
+                    'kindergarten_name', kg.kindergarten_name,
+                    'attendance_status', pa.attendance_status,
+                    'notes', pa.notes,
+                    'created_at', pa.created_at,
+                    'archived_at', pa.archived_at
+                ) as rw,
+                count(*) over () as cnt
+                FROM ower.past_attendance pa
+                LEFT JOIN ower.children_roster cr ON cr.id = pa.child_id
+                LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+                WHERE 1=1
+        `;
+
+        if (date_from) {
+            sql += ` AND pa.date >= ?`;
+            values.push(date_from);
+        }
+
+        if (date_to) {
+            sql += ` AND pa.date <= ?`;
+            values.push(date_to);
+        }
+
+        if (child_name) {
+            sql += ` AND cr.child_name ILIKE ?`;
+            values.push(`%${child_name}%`);
+        }
+
+        if (group_name) {
+            sql += ` AND kg.group_name ILIKE ?`;
+            values.push(`%${group_name}%`);
+        }
+
+        if (kindergarten_name) {
+            sql += ` AND kg.kindergarten_name ILIKE ?`;
+            values.push(`%${kindergarten_name}%`);
+        }
+
+        if (attendance_status) {
+            sql += ` AND pa.attendance_status = ?`;
+            values.push(attendance_status);
+        }
+
+        const allowedSortFields = ['id', 'date', 'child_name', 'group_name', 'attendance_status'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'date';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'DESC';
+        
+        if (validSortBy === 'child_name') {
+            sql += ` ORDER BY cr.child_name ${validSortDirection}`;
+        } else if (validSortBy === 'group_name') {
+            sql += ` ORDER BY kg.group_name ${validSortDirection}`;
+        } else {
+            sql += ` ORDER BY pa.${validSortBy} ${validSortDirection}`;
+        }
+        
+        sql += ` LIMIT ? OFFSET ?`;
+        values.push(limit, offset);
+        sql += `) q`;
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getPastAttendanceById(id) {
+        const sql = `
+            SELECT 
+                pa.id, 
+                pa.date, 
+                pa.child_id,
+                pa.attendance_status,
+                pa.notes,
+                pa.created_at,
+                pa.archived_at,
+                cr.child_name,
+                cr.parent_name,
+                kg.group_name,
+                kg.kindergarten_name
+            FROM ower.past_attendance pa
+            LEFT JOIN ower.children_roster cr ON cr.id = pa.child_id
+            LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+            WHERE pa.id = ?
+        `;
+        return await sqlRequest(sql, [id]);
+    }
+
+    async archiveYesterdayAttendance() {
+        const sql = `SELECT ower.archive_yesterday_attendance()`;
+        return await sqlRequest(sql);
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ (PAST_ATTENDANCE)
+    // ===============================
+
+    async findPastAttendanceByFilter(options) {
+        const {
+            limit,
+            offset,
+            sort_by = 'child_name',
+            sort_direction = 'asc',
+            child_name,
+            group_name,
+            kindergarten_name,
+            date,
+            attendance_status
+        } = options;
+
+        const values = [];
+        let paramIndex = 1;
+        
+        // Для архівних відвідувань - якщо дата не вказана, використовуємо вчорашню дату
+        let filterDate = date;
+        if (!filterDate) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            filterDate = yesterday.toLocaleDateString('uk-UA', { 
+                timeZone: 'Europe/Kyiv',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).split('.').reverse().join('-');
+        }
+
+        let sql = `
+            SELECT json_agg(rw) as data,
+                max(cnt) as count
+            FROM (
+                SELECT json_build_object(
+                    'id', pa.id,
+                    'date', pa.date,
+                    'child_id', pa.child_id,
+                    'child_name', pa.child_name,
+                    'group_name', pa.group_name,
+                    'kindergarten_name', pa.kindergarten_name,
+                    'attendance_status', pa.attendance_status,
+                    'notes', pa.notes,
+                    'created_at', pa.created_at,
+                    'archived_at', pa.archived_at
+                ) as rw,
+                count(*) over () as cnt
+                FROM ower.past_attendance pa
+                WHERE 1=1
+        `;
+
+        // Фільтр по даті
+        if (filterDate) {
+            sql += ` AND pa.date = $${paramIndex}`;
+            values.push(filterDate);
+            paramIndex++;
+        }
+
+        // Додаємо фільтри
+        if (child_name) {
+            sql += ` AND pa.child_name ILIKE $${paramIndex}`;
+            values.push(`%${child_name}%`);
+            paramIndex++;
+        }
+
+        if (group_name) {
+            sql += ` AND pa.group_name ILIKE $${paramIndex}`;
+            values.push(`%${group_name}%`);
+            paramIndex++;
+        }
+
+        if (kindergarten_name) {
+            sql += ` AND pa.kindergarten_name ILIKE $${paramIndex}`;
+            values.push(`%${kindergarten_name}%`);
+            paramIndex++;
+        }
+
+        if (attendance_status) {
+            sql += ` AND pa.attendance_status = $${paramIndex}`;
+            values.push(attendance_status);
+            paramIndex++;
+        }
+
+        // Додаємо сортування
+        const allowedSortFields = ['child_name', 'group_name', 'date'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'child_name';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'ASC';
+        
+        if (validSortBy === 'child_name') {
+            sql += ` ORDER BY pa.child_name ${validSortDirection}`;
+        } else if (validSortBy === 'group_name') {
+            sql += ` ORDER BY pa.group_name ${validSortDirection}`;
+        } else if (validSortBy === 'date') {
+            sql += ` ORDER BY pa.date ${validSortDirection}`;
+        }
+        
+        // Додаємо пагінацію
+        sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        values.push(limit, offset);
+        
+        sql += `) q`;
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getPastAttendanceById(id) {
+        const sql = `
+            SELECT 
+                pa.id, 
+                pa.date, 
+                pa.child_id,
+                pa.child_name,
+                pa.group_name,
+                pa.kindergarten_name,
+                pa.attendance_status,
+                pa.notes,
+                pa.created_at,
+                pa.archived_at
+            FROM ower.past_attendance pa
+            WHERE pa.id = $1
+        `;
+        return await sqlRequest(sql, [id]);
+    }
+
+    async archiveYesterdayAttendance() {
+        const sql = `SELECT ower.archive_yesterday_attendance()`;
+        return await sqlRequest(sql);
+    }
 }
 
 module.exports = new KindergartenRepository();

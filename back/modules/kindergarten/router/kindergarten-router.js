@@ -44,8 +44,10 @@ const {
     paymentStatementDeleteSchema,
     paymentStatementInfoSchema,
     paymentStatementMonthlyFilterSchema,
-    
+    pastAttendanceFilterSchema,
+    pastAttendanceInfoSchema,
 } = require('../schema/kindergarten-schema');
+
 
 const routes = async (fastify) => {
     // Роути для основної функціональності садочків
@@ -306,6 +308,25 @@ const routes = async (fastify) => {
         preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findMonthlyPaymentStatements);
 
+    // ===============================
+    // РОУТИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ
+    // ===============================
+
+    fastify.post("/past_attendance/filter", { 
+        schema: pastAttendanceFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
+    }, kindergartenController.findPastAttendanceByFilter);
+
+    fastify.get("/past_attendance/:id", { 
+        schema: pastAttendanceInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
+        config: viewLimit 
+    }, kindergartenController.getPastAttendanceById);
+
+    // Роут для ручного запуску архівування (для адмінів)
+    fastify.post("/past_attendance/archive", { 
+        preParsing: RouterGuard({ permissionLevel: "admin", permissions: accessLevel.EDIT })
+    }, kindergartenController.archiveYesterdayAttendance);
 }
 
 module.exports = routes;
