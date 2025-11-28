@@ -62,12 +62,17 @@ const Admins = () => {
             phone_number: '',
             full_name: '',
             kindergarten_name: '',
+            group_id: null,  // ✅ ДОДАНО
             role: 'educator'
         }
     });
 
-    // ✅ ДОДАНО: Стан для списку садочків
+    // Стан для списку садочків
     const [kindergartensData, setKindergartensData] = useState([]);
+    
+    // ✅ ДОДАНО: Стани для груп
+    const [groupOptions, setGroupOptions] = useState([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
 
     const isFirstAPI = useRef(true);
     const {error, status, data, retryFetch} = useFetch('api/kindergarten/admins/filter', {
@@ -90,7 +95,7 @@ const Admins = () => {
         });
     }, [stateAdmins.sendData, retryFetch]);
 
-    // ✅ ДОДАНО: Завантажуємо унікальні назви садочків
+    // Завантажуємо унікальні назви садочків
     useEffect(() => {
         const loadKindergartens = async () => {
             try {
@@ -124,6 +129,44 @@ const Admins = () => {
         loadKindergartens();
     }, []);
 
+    // ✅ ДОДАНО: Завантаження груп по садочку
+    const fetchGroupsByKindergarten = async (kindergartenName) => {
+        if (!kindergartenName) {
+            setGroupOptions([]);
+            return;
+        }
+
+        try {
+            setLoadingGroups(true);
+            
+            const response = await fetchFunction('api/kindergarten/groups/by-kindergarten', {
+                method: 'POST',
+                data: { kindergarten_name: kindergartenName }
+            });
+
+            if (response?.data && Array.isArray(response.data)) {
+                const options = response.data.map(group => ({
+                    value: group.id,
+                    label: `${group.group_name}${group.educator_name ? ` (${group.educator_name})` : ''}`
+                }));
+                setGroupOptions(options);
+            } else {
+                setGroupOptions([]);
+            }
+        } catch (error) {
+            console.error('Помилка завантаження груп:', error);
+            notification({
+                type: 'error',
+                placement: 'top',
+                title: 'Помилка',
+                message: 'Не вдалося завантажити групи',
+            });
+            setGroupOptions([]);
+        } finally {
+            setLoadingGroups(false);
+        }
+    };
+
     const getSortIcon = useCallback((columnName) => {
         if (stateAdmins.sendData.sort_by === columnName) {
             return stateAdmins.sendData.sort_direction === 'asc' ? sortUpIcon : sortDownIcon;
@@ -150,7 +193,7 @@ const Admins = () => {
         }));
     }, [stateAdmins.sendData]);
 
-    // Відкрити модальне вікно для створення
+    // ✅ ОНОВЛЕНО: Відкрити модальне вікно для створення
     const openCreateModal = () => {
         setModalState({
             isOpen: true,
@@ -161,13 +204,15 @@ const Admins = () => {
                 phone_number: '',
                 full_name: '',
                 kindergarten_name: '',
+                group_id: null,  // ✅ ДОДАНО
                 role: 'educator'
             }
         });
+        setGroupOptions([]);  // ✅ ОЧИСТИТИ групи
     };
 
-    // Відкрити модальне вікно для редагування
-    const openEditModal = (record) => {
+    // ✅ ОНОВЛЕНО: Відкрити модальне вікно для редагування
+    const openEditModal = async (record) => {
         setModalState({
             isOpen: true,
             mode: 'edit',
@@ -177,9 +222,15 @@ const Admins = () => {
                 phone_number: record.phone_number,
                 full_name: record.full_name,
                 kindergarten_name: record.kindergarten_name,
+                group_id: record.group_id,  // ✅ ДОДАНО
                 role: record.role
             }
         });
+        
+        // ✅ ЗАВАНТАЖИТИ групи для вибраного садочка
+        if (record.kindergarten_name) {
+            await fetchGroupsByKindergarten(record.kindergarten_name);
+        }
     };
 
     // Закрити модальне вікно
@@ -193,12 +244,14 @@ const Admins = () => {
                 phone_number: '',
                 full_name: '',
                 kindergarten_name: '',
+                group_id: null,  // ✅ ДОДАНО
                 role: 'educator'
             }
         });
+        setGroupOptions([]);  // ✅ ОЧИСТИТИ групи
     };
 
-    // Зміна input поля
+    // ✅ ОНОВЛЕНО: Зміна input поля з динамічним завантаженням груп
     const handleInputChange = (field, value) => {
         setModalState(prev => ({
             ...prev,
@@ -209,22 +262,54 @@ const Admins = () => {
                     : value
             }
         }));
+        
+        // ✅ ДИНАМІЧНЕ ЗАВАНТАЖЕННЯ: При зміні садочка - завантажити його групи
+        if (field === 'kindergarten_name') {
+            // Очистити вибрану групу
+            setModalState(prev => ({
+                ...prev,
+                formData: {
+                    ...prev.formData,
+                    kindergarten_name: value,
+                    group_id: null  // Скинути групу
+                }
+            }));
+            
+            // Завантажити нові групи
+            const kindergartenName = typeof value === 'object' && value?.value 
+                ? value.value 
+                : value;
+            fetchGroupsByKindergarten(kindergartenName);
+        }
     };
 
     // Зміна select поля
     const handleSelectChange = (name, value) => {
-        setModalState(prev => ({
-            ...prev,
-            formData: {
-                ...prev.formData,
-                [name]: value
-            }
-        }));
+        // ✅ ВИПРАВЛЕНО: Об'єднано два setModalState в один
+        if (name === 'kindergarten_name') {
+            setModalState(prev => ({
+                ...prev,
+                formData: {
+                    ...prev.formData,
+                    kindergarten_name: value,  // ✅ Встановити садочок
+                    group_id: null              // ✅ Скинути групу
+                }
+            }));
+            fetchGroupsByKindergarten(value);
+        } else {
+            setModalState(prev => ({
+                ...prev,
+                formData: {
+                    ...prev.formData,
+                    [name]: value
+                }
+            }));
+        }
     };
 
-    // Збереження (створення або оновлення)
+    // ✅ ОНОВЛЕНО: Збереження (створення або оновлення)
     const handleSave = async () => {
-        const { phone_number, full_name, kindergarten_name, role } = modalState.formData;
+        const { phone_number, full_name, kindergarten_name, group_id, role } = modalState.formData;
 
         // Валідація
         if (!phone_number.trim()) {
@@ -247,7 +332,6 @@ const Admins = () => {
             return;
         }
 
-        // ✅ ОНОВЛЕНО: Перевірка для селектора
         if (!kindergarten_name || !kindergarten_name.trim()) {
             notification({
                 type: 'warning',
@@ -267,10 +351,10 @@ const Admins = () => {
                     data: {
                         phone_number: phone_number.trim(),
                         full_name: full_name.trim(),
-                        // ✅ ОНОВЛЕНО: Обробка значення селектора
                         kindergarten_name: typeof kindergarten_name === 'string' 
                             ? kindergarten_name.trim() 
                             : kindergarten_name,
+                        group_id: group_id || null,  // ✅ ДОДАНО
                         role: role
                     }
                 });
@@ -287,10 +371,10 @@ const Admins = () => {
                     data: {
                         phone_number: phone_number.trim(),
                         full_name: full_name.trim(),
-                        // ✅ ОНОВЛЕНО: Обробка значення селектора
                         kindergarten_name: typeof kindergarten_name === 'string' 
                             ? kindergarten_name.trim() 
                             : kindergarten_name,
+                        group_id: group_id || null,  // ✅ ДОДАНО
                         role: role
                     }
                 });
@@ -355,6 +439,7 @@ const Admins = () => {
         }
     };
 
+    // ✅ ОНОВЛЕНО: Додано колонку "Група"
     const columns = useMemo(() => {
         const columns = [
             {
@@ -405,6 +490,26 @@ const Admins = () => {
                 key: 'kindergarten_name',
                 sorter: false,
             },
+            // ✅ НОВА КОЛОНКА "ГРУПА"
+            {
+                title: (
+                    <div 
+                        className={`sortable-header ${stateAdmins.sendData.sort_by === 'group_name' ? 'active' : ''}`}
+                        onClick={() => handleSort('group_name')}
+                    >
+                        <span>Група</span>
+                        <div className="sort-icon-wrapper">
+                            {getSortIcon('group_name')}
+                        </div>
+                    </div>
+                ),
+                dataIndex: 'group_name',
+                key: 'group_name',
+                sorter: false,
+                render: (group_name) => {
+                    return <span>{group_name || '-'}</span>;
+                }
+            },
             {
                 title: 'Роль',
                 dataIndex: 'role',
@@ -449,6 +554,7 @@ const Admins = () => {
         return columns;
     }, [stateAdmins.sendData.sort_by, stateAdmins.sendData.sort_direction]);
 
+    // ✅ ОНОВЛЕНО: Додано group_id та group_name
     const tableData = useMemo(() => {
         if (data?.items?.length) {
             return data.items.map((el) => ({
@@ -457,6 +563,8 @@ const Admins = () => {
                 phone_number: el.phone_number,
                 full_name: el.full_name,
                 kindergarten_name: el.kindergarten_name,
+                group_id: el.group_id,      // ✅ ДОДАНО
+                group_name: el.group_name,  // ✅ ДОДАНО
                 role: el.role,
             }));
         }
@@ -732,7 +840,7 @@ const Admins = () => {
                         </div>
                     </div>
 
-                    {/* Модальне вікно */}
+                    {/* ✅ ОНОВЛЕНО: Модальне вікно з полем для групи */}
                     <Transition in={modalState.isOpen} timeout={200} unmountOnExit nodeRef={modalNodeRef}>
                         {state => (
                             <Modal
@@ -768,9 +876,8 @@ const Admins = () => {
                                         />
                                     </div>
 
-                                    {/* ✅ ЗМІНЕНО: Input замінено на Select */}
                                     <div className="modal-input-item">
-                                        <h4 className="input-description">Назва садочка</h4>
+                                        <h4 className="input-description">Назва садочка <span style={{color: 'red'}}>*</span></h4>
                                         <Select
                                             placeholder={kindergartensData.length > 0 ? "Оберіть садочок" : "Завантаження..."}
                                             name="kindergarten_name"
@@ -779,11 +886,36 @@ const Admins = () => {
                                                 kindergartensData.find(k => k.value === modalState.formData.kindergarten_name) || null
                                                 : null
                                             }
-                                            onChange={(selectedOption) => handleSelectChange('kindergarten_name', selectedOption?.value || '')}
+                                            onChange={(name, option) => handleSelectChange(name, option?.value || null)}
                                             style={dropDownStyle}
                                             required
                                         />
                                     </div>
+
+                                    {/* ✅ НОВЕ ПОЛЕ - Група */}
+                                        <div className="modal-input-item">
+                                            <h4 className="input-description">Група</h4>
+                                            <Select
+                                                placeholder={loadingGroups ? "Завантаження..." : "Оберіть групу"}
+                                                name="group_id"
+                                                options={groupOptions}
+                                                value={modalState.formData.group_id ? 
+                                                    groupOptions.find(g => g.value === modalState.formData.group_id) || null
+                                                    : null
+                                                }
+                                                onChange={(name, option) => {
+                                                    console.log('🟣 Select групи:', { name, option, value: option?.value });
+                                                    handleSelectChange(name, option?.value || null);
+                                                }}
+                                                style={dropDownStyle}
+                                                disabled={!modalState.formData.kindergarten_name || loadingGroups}
+                                            />
+                                            {modalState.formData.kindergarten_name && (
+                                                <p style={{fontSize: '12px', color: '#666', marginTop: '4px'}}>
+                                                    Показуються тільки групи вибраного садочка
+                                                </p>
+                                            )}
+                                        </div>
 
                                     <div className="modal-input-item">
                                         <h4 className="input-description">Роль</h4>
@@ -791,7 +923,7 @@ const Admins = () => {
                                             placeholder="Оберіть роль"
                                             options={ROLE_OPTIONS}
                                             value={ROLE_OPTIONS.find(opt => opt.value === modalState.formData.role) || null}
-                                            onChange={(selectedOption) => handleSelectChange('role', selectedOption?.value || 'educator')}
+                                            onChange={(name, option) => handleSelectChange(name, option?.value || "educator")}
                                             style={dropDownStyle}
                                             required
                                         />

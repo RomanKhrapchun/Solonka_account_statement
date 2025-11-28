@@ -39,7 +39,12 @@ const kindergartenGroupFilterSchema = {
 };
 
 const kindergartenGroupCreateSchema = {
-    body: {
+    body: { 
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+        },
         group_name: {
             type: 'string',
             min: 1,
@@ -60,6 +65,12 @@ const kindergartenGroupUpdateSchema = {
         }
     },
     body: {
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+            optional: true,
+        },
         group_name: {
             type: 'string',
             min: 1,
@@ -676,6 +687,11 @@ const adminsFilterSchema = {
             max: 100,
             optional: true,
         },
+        group_id: {
+            type: 'number',
+            positive: true,
+            optional: true,
+        },
         role: {
             type: 'string',
             enum: ['educator', 'admin'],
@@ -699,6 +715,11 @@ const adminsCreateSchema = {
             type: 'string',
             min: 1,
             max: 100,
+        },
+        group_id: {
+            type: 'number',
+            positive: true,
+            optional: true,
         },
         role: {
             type: 'string',
@@ -733,6 +754,12 @@ const adminsUpdateSchema = {
             max: 100,
             optional: true,
         },
+        group_id: {
+            type: 'number',
+            positive: true,
+            optional: true,
+            nullable: true,
+        },
         role: {
             type: 'string',
             enum: ['educator', 'admin'],
@@ -755,6 +782,20 @@ const adminsInfoSchema = {
         id: {
             type: 'string',
             numeric: true,
+        }
+    }
+};
+
+// ===============================
+// СХЕМА ДЛЯ ОТРИМАННЯ ГРУП ПО САДОЧКУ
+// ===============================
+
+const groupsByKindergartenSchema = {
+    body: {
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
         }
     }
 };
@@ -1125,6 +1166,7 @@ module.exports = {
     adminsInfoSchema,
     verifyEducatorSchema,
     validateMobileAttendanceFormat,
+    groupsByKindergartenSchema,
 
     //Виписки по оплаті
     paymentStatementFilterSchema,

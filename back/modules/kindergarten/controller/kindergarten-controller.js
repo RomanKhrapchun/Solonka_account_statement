@@ -1130,6 +1130,23 @@ class KindergartenController {
                 message: error.message 
             });
         }
+    }   
+
+     // ===============================
+    // ОТРИМАННЯ ГРУП ПО САДОЧКУ
+    // ===============================
+
+    async getGroupsByKindergarten(request, reply) {
+        try {
+            const groups = await kindergartenService.getGroupsByKindergarten(request);
+            reply.status(200).send(groups);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch groups',
+                message: error.message 
+            });
+        }
     }
 }
 

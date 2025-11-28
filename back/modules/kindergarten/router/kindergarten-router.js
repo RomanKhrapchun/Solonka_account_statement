@@ -46,6 +46,7 @@ const {
     paymentStatementMonthlyFilterSchema,
     pastAttendanceFilterSchema,
     pastAttendanceInfoSchema,
+    groupsByKindergartenSchema,
 } = require('../schema/kindergarten-schema');
 
 
@@ -260,7 +261,7 @@ const routes = async (fastify) => {
 
     fastify.post("/admins/verify", { 
         schema: verifyEducatorSchema,
-        preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
+        //preParsing: RouterGuard()
     }, kindergartenController.verifyEducator);
 
     // ===============================
@@ -327,6 +328,14 @@ const routes = async (fastify) => {
     fastify.post("/past_attendance/archive", { 
         preParsing: RouterGuard({ permissionLevel: "admin", permissions: accessLevel.EDIT })
     }, kindergartenController.archiveYesterdayAttendance);
+
+    // ===============================
+    // РОУТ ДЛЯ ОТРИМАННЯ ГРУП ПО САДОЧКУ
+    // ===============================
+    fastify.post("/groups/by-kindergarten", { 
+        schema: groupsByKindergartenSchema,
+        preParsing: RouterGuard()
+    }, kindergartenController.getGroupsByKindergarten);
 }
 
 module.exports = routes;

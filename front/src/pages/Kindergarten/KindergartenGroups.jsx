@@ -112,11 +112,15 @@ const KindergartenGroups = () => {
         };
     });
 
+    // ✅ ДОДАНО: Стан для списку садочків
+    const [kindergartensData, setKindergartensData] = useState([]);
+
     // стан для модального вікна додавання групи
     const [modalState, setModalState] = useState({
         isOpen: false,
         loading: false,
         formData: {
+            kindergarten_name: '',  // ✅ ДОДАНО
             group_name: '',
             group_type: ''
         }
@@ -128,7 +132,7 @@ const KindergartenGroups = () => {
         loading: false,
         groupId: null,
         formData: {
-            
+            kindergarten_name: '',  // ✅ ДОДАНО
             group_name: '',
             group_type: ''
         }
@@ -162,6 +166,40 @@ const KindergartenGroups = () => {
             data: stateKindergarten.sendData
         });
     }, [stateKindergarten.sendData, retryFetch]);
+
+    // ✅ ДОДАНО: Завантаження унікальних назв садочків
+    useEffect(() => {
+        const loadKindergartens = async () => {
+            try {
+                const response = await fetchFunction('api/kindergarten/groups/filter', {
+                    method: 'POST',
+                    data: { limit: 1000, page: 1 }
+                });
+                
+                if (response?.data && Array.isArray(response.data.items)) {
+                    // Отримуємо унікальні назви садочків
+                    const uniqueKindergartens = [...new Set(
+                        response.data.items
+                            .map(group => group.kindergarten_name)
+                            .filter(name => name) // Прибираємо null/undefined
+                    )];
+                    
+                    const kindergartenOptions = uniqueKindergartens.map(name => ({
+                        value: name,
+                        label: name
+                    }));
+                    
+                    setKindergartensData(kindergartenOptions);
+                } else {
+                    setKindergartensData([]);
+                }
+            } catch (error) {
+                console.error('Error loading kindergartens:', error);
+                setKindergartensData([]);
+            }
+        };
+        loadKindergartens();
+    }, []);
 
     // Зберігання стану
     useEffect(() => {
@@ -413,13 +451,13 @@ const KindergartenGroups = () => {
         }
     }, [stateKindergarten.sendData.page])
 
-    // Функції для модального вікна додавання
+    // ✅ ОНОВЛЕНО: Функції для модального вікна додавання
     const openModal = () => {
         setModalState(prev => ({
             ...prev,
             isOpen: true,
             formData: {
-                
+                kindergarten_name: '',  // ✅ ДОДАНО
                 group_name: '',
                 group_type: ''
             }
@@ -444,10 +482,21 @@ const KindergartenGroups = () => {
         }));
     };
 
+    // ✅ ОНОВЛЕНО: Додано kindergarten_name в валідацію та POST
     const handleSaveGroup = async () => {
-        const { group_name, group_type } = modalState.formData;
+        const { kindergarten_name, group_name, group_type } = modalState.formData;
         
         // Валідація
+        if (!kindergarten_name || !kindergarten_name.trim()) {
+            notification({
+                type: 'warning',
+                placement: 'top',
+                title: 'Помилка',
+                message: 'Будь ласка, оберіть садочок',
+            });
+            return;
+        }
+
         if (!group_name.trim() || !group_type) {
             notification({
                 type: 'warning',
@@ -464,6 +513,7 @@ const KindergartenGroups = () => {
             await fetchFunction('api/kindergarten/groups', {
                 method: 'POST',
                 data: {
+                    kindergarten_name: kindergarten_name.trim(),  // ✅ ДОДАНО
                     group_name: group_name.trim(),
                     group_type: String(group_type)
                 }
@@ -496,14 +546,14 @@ const KindergartenGroups = () => {
         }
     };
 
-    // Функції для модального вікна редагування
+    // ✅ ОНОВЛЕНО: Функції для модального вікна редагування
     const openEditModal = (record) => {
         setEditModalState({
             isOpen: true,
             loading: false,
             groupId: record.id,
             formData: {
-                
+                kindergarten_name: record.kindergarten_name,  // ✅ ДОДАНО
                 group_name: record.group_name,
                 group_type: record.group_type
             }
@@ -528,10 +578,21 @@ const KindergartenGroups = () => {
         }));
     };
 
+    // ✅ ОНОВЛЕНО: Додано kindergarten_name в валідацію та PUT
     const handleUpdateGroup = async () => {
-        const { group_name, group_type } = editModalState.formData;
+        const { kindergarten_name, group_name, group_type } = editModalState.formData;
         
         // Валідація
+        if (!kindergarten_name || !kindergarten_name.trim()) {
+            notification({
+                type: 'warning',
+                placement: 'top',
+                title: 'Помилка',
+                message: 'Будь ласка, оберіть садочок',
+            });
+            return;
+        }
+
         if (!group_name.trim() || !group_type) {
             notification({
                 type: 'warning',
@@ -548,6 +609,7 @@ const KindergartenGroups = () => {
             await fetchFunction(`api/kindergarten/groups/${editModalState.groupId}`, {
                 method: 'PUT',
                 data: {
+                    kindergarten_name: kindergarten_name.trim(),  // ✅ ДОДАНО
                     group_name: group_name.trim(),
                     group_type: String(group_type)
                 }
@@ -701,7 +763,7 @@ const KindergartenGroups = () => {
                 </React.Fragment> : null
             }
             
-            {/* Модальне вікно для додавання групи */}
+            {/* ✅ ОНОВЛЕНО: Модальне вікно для додавання групи */}
             <Transition in={modalState.isOpen} timeout={200} unmountOnExit nodeRef={modalNodeRef}>
                 {state => (
                     <Modal
@@ -715,6 +777,17 @@ const KindergartenGroups = () => {
                         title="Додати нову групу"
                     >
                         <div className="modal-form">
+                            {/* ✅ НОВЕ ПОЛЕ - Садочок */}
+                            <div className="form-group">
+                                <Input
+                                    label="Назва садочка"
+                                    placeholder="Введіть назву садочка"
+                                    name="kindergarten_name"
+                                    value={modalState.formData.kindergarten_name}
+                                    onChange={handleModalInputChange}
+                                    required
+                                />
+                            </div>
                             
                             <div className="form-group">
                                 <Input
@@ -752,7 +825,7 @@ const KindergartenGroups = () => {
                 )}
             </Transition>
 
-            {/* Модальне вікно для редагування групи */}
+            {/* ✅ ОНОВЛЕНО: Модальне вікно для редагування групи */}
             <Transition in={editModalState.isOpen} timeout={200} unmountOnExit nodeRef={editModalNodeRef}>
                 {state => (
                     <Modal
@@ -766,6 +839,17 @@ const KindergartenGroups = () => {
                         title="Редагувати групу"
                     >
                         <div className="modal-form">
+                            {/* ✅ НОВЕ ПОЛЕ - Садочок */}
+                            <div className="form-group">
+                                <Input
+                                    label="Назва садочка"
+                                    placeholder="Введіть назву садочка"
+                                    name="kindergarten_name"
+                                    value={editModalState.formData.kindergarten_name}
+                                    onChange={handleEditInputChange}
+                                    required
+                                />
+                            </div>
                             
                             <div className="form-group">
                                 <Input

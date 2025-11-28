@@ -151,26 +151,17 @@ class KindergartenRepository {
     }
 
     async createGroup(groupData) {
-        const {
-            
-            group_name,
-            group_type,
-            created_at
-        } = groupData;
+
+    const { kindergarten_name, group_name, group_type, created_at } = groupData;
 
         const sql = `
             INSERT INTO ower.kindergarten_groups 
-            (group_name, group_type, created_at)
-            VALUES (?, ?, ?)
-            RETURNING id, group_name, group_type, created_at
+            (kindergarten_name, group_name, group_type, created_at)
+            VALUES (?, ?, ?, ?)
+            RETURNING id, kindergarten_name, group_name, group_type, created_at
         `;
 
-        const values = [
-            
-            group_name,
-            group_type,
-            created_at
-        ];
+    const values = [kindergarten_name, group_name, group_type, created_at];
 
         return await sqlRequest(sql, values);
     }
@@ -1083,26 +1074,30 @@ class KindergartenRepository {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,
             role
         } = options;
 
         const values = [];
-        let sql = `
-            select json_agg(rw) as data,
-                max(cnt) as count
-                from (
-                select json_build_object(
-                    'id', ka.id,
-                    'phone_number', ka.phone_number,
-                    'full_name', ka.full_name,
-                    'kindergarten_name', ka.kindergarten_name,
-                    'role', ka.role,
-                    'created_at', ka.created_at
-                ) as rw,
-                count(*) over () as cnt
-            from ower.kindergarten_admins ka
-            where 1=1
-        `;
+                let sql = `
+                    select json_agg(rw) as data,
+                        max(cnt) as count
+                        from (
+                        select json_build_object(
+                            'id', ka.id,
+                            'phone_number', ka.phone_number,
+                            'full_name', ka.full_name,
+                            'kindergarten_name', ka.kindergarten_name,
+                            'group_id', ka.group_id,
+                            'group_name', kg.group_name,
+                            'role', ka.role,
+                            'created_at', ka.created_at
+                        ) as rw,
+                        count(*) over () as cnt
+                    from ower.kindergarten_admins ka
+                    left join ower.kindergarten_groups kg on kg.id = ka.group_id
+                    where 1=1
+                `;
 
         // Додаємо фільтри
         if (phone_number) {
@@ -1120,17 +1115,23 @@ class KindergartenRepository {
             values.push(`%${kindergarten_name}%`);
         }
 
+        if (group_id) {
+            sql += ` AND ka.group_id = ?`;
+            values.push(group_id);
+        }
+
         if (role) {
             sql += ` AND ka.role = ?`;
             values.push(role);
         }
 
         // Додаємо сортування
-        const allowedSortFields = ['id', 'phone_number', 'full_name', 'kindergarten_name', 'role', 'created_at'];
+        const allowedSortFields = ['id', 'phone_number', 'full_name', 'kindergarten_name', 'group_name', 'role', 'created_at'];
         const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'id';
         const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toLowerCase() : 'desc';
         
-        sql += ` order by ka.${validSortBy} ${validSortDirection}`;
+        const sortColumn = sort_by === 'group_name' ? 'kg.group_name' : `ka.${validSortBy}`;
+        sql += ` order by ${sortColumn} ${validSortDirection}`;
         
         // Додаємо пагінацію
         sql += ` limit ? offset ? ) q`;
@@ -1141,9 +1142,19 @@ class KindergartenRepository {
 
     async getAdminById(id) {
         const sql = `
-            SELECT id, phone_number, full_name, kindergarten_name, role, created_at, updated_at
-            FROM ower.kindergarten_admins
-            WHERE id = ?
+            SELECT 
+                ka.id, 
+                ka.phone_number, 
+                ka.full_name, 
+                ka.kindergarten_name,
+                ka.group_id,
+                kg.group_name,
+                ka.role, 
+                ka.created_at, 
+                ka.updated_at
+            FROM ower.kindergarten_admins ka
+            LEFT JOIN ower.kindergarten_groups kg ON kg.id = ka.group_id
+            WHERE ka.id = ?
         `;
         return await sqlRequest(sql, [id]);
     }
@@ -1169,21 +1180,23 @@ class KindergartenRepository {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,
             role,
             created_at
         } = adminData;
 
         const sql = `
             INSERT INTO ower.kindergarten_admins
-            (phone_number, full_name, kindergarten_name, role, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            RETURNING id, phone_number, full_name, kindergarten_name, role, created_at
+            (phone_number, full_name, kindergarten_name, group_id, role, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING id, phone_number, full_name, kindergarten_name, group_id, role, created_at
         `;
 
         const values = [
             phone_number,
             full_name,
             kindergarten_name,
+            group_id || null,
             role || 'educator',
             created_at
         ];
@@ -1199,7 +1212,7 @@ class KindergartenRepository {
             UPDATE ower.kindergarten_admins
             SET ${fields}, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-            RETURNING id, phone_number, full_name, kindergarten_name, role, created_at, updated_at
+            RETURNING id, phone_number, full_name, kindergarten_name, group_id, role, created_at, updated_at
         `;
         
         return await sqlRequest(sql, values);
@@ -1216,17 +1229,82 @@ class KindergartenRepository {
     }
 
     // ===============================
+    // ОТРИМАННЯ ГРУП ПО САДОЧКУ
+    // ===============================
+
+    async getGroupsByKindergarten(kindergartenName) {
+        const sql = `
+            SELECT 
+                id,
+                group_name,
+                kindergarten_name,
+                group_type
+            FROM ower.kindergarten_groups
+            WHERE kindergarten_name = ?
+            ORDER BY group_name ASC
+        `;
+        
+        return await sqlRequest(sql, [kindergartenName]);
+    }
+
+    // ===============================
     // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
     // ===============================
 
     async verifyEducator(phoneNumber) {
+        // SQL запит з JOIN для отримання вихователя, групи та дітей
         const sql = `
-            SELECT id, phone_number, full_name, kindergarten_name
-            FROM ower.kindergarten_admins
-            WHERE phone_number = ? AND role = 'educator'
-            LIMIT 1
+            SELECT 
+                a.id as educator_id,
+                a.phone_number,
+                a.full_name as educator_name,
+                a.kindergarten_name,
+                a.group_id,
+                g.name as group_name,
+                c.id as child_id,
+                c.full_name as child_name,
+                c.birth_date,
+                c.parent_name,
+                c.parent_phone
+            FROM ower.kindergarten_admins a
+            LEFT JOIN ower.kindergarten_groups g ON a.group_id = g.id
+            LEFT JOIN ower.children_roster c ON a.group_id = c.group_id
+            WHERE a.phone_number = ? AND a.role = 'educator'
+            ORDER BY c.full_name ASC
         `;
-        return await sqlRequest(sql, [phoneNumber]);
+        
+        const rows = await sqlRequest(sql, [phoneNumber]);
+        
+        // Якщо вихователя не знайдено
+        if (!rows || rows.length === 0) {
+            return null;
+        }
+        
+        // Групуємо дітей (тому що SQL повертає по рядку на кожну дитину)
+        const educator = {
+            id: rows[0].educator_id,
+            phone_number: rows[0].phone_number,
+            full_name: rows[0].educator_name,
+            kindergarten_name: rows[0].kindergarten_name,
+            group_id: rows[0].group_id,
+            group_name: rows[0].group_name,
+            children: []
+        };
+        
+        // Додаємо дітей (пропускаємо null якщо дітей немає)
+        rows.forEach(row => {
+            if (row.child_id) {
+                educator.children.push({
+                    id: row.child_id,
+                    full_name: row.child_name,
+                    birth_date: row.birth_date,
+                    parent_name: row.parent_name,
+                    parent_phone: row.parent_phone
+                });
+            }
+        });
+        
+        return educator;
     }
 
      // ===============================

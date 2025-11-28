@@ -78,10 +78,8 @@ class KindergartenService {
     }
 
     async createGroup(request) {
-        const {
-            group_name,
-            group_type
-        } = request.body;
+        
+    const { kindergarten_name, group_name, group_type } = request.body;
 
         // ❌ ВИДАЛИТИ ЦЮ КОНВЕРТАЦІЮ:
         // const groupTypeMapping = {
@@ -95,11 +93,7 @@ class KindergartenService {
             throw new Error('Група з такою назвою вже існує');
         }
 
-        const groupData = {
-            group_name,
-            group_type, // ✅ Зберігаємо як є: 'young' або 'older'
-            created_at: new Date()
-        };
+    const groupData = { kindergarten_name, group_name, group_type, created_at: new Date() };
 
         const result = await KindergartenRepository.createGroup(groupData);
 
@@ -412,6 +406,19 @@ class KindergartenService {
         };
         
         const filterDate = date || getCurrentUkraineDate();
+        const currentDate = getCurrentUkraineDate();
+        
+        // ✅ АВТОМАТИЧНЕ АРХІВУВАННЯ: якщо дата запиту = сьогодні, архівуємо вчорашні дані
+        if (filterDate === currentDate) {
+            try {
+                console.log('🗄️ Автоархівування: перевірка необхідності...');
+                await KindergartenRepository.archiveYesterdayAttendance();
+                console.log('✅ Автоархівування завершено');
+            } catch (archiveError) {
+                console.error('⚠️ Помилка автоархівування (не критично):', archiveError.message);
+                // Продовжуємо навіть якщо архівування не вдалося
+            }
+        }
         
         if (child_name || group_name || kindergarten_name || attendance_status) {
             await logRepository.createLog({
@@ -444,7 +451,7 @@ class KindergartenService {
 
         return paginationData(userData[0], page, limit);
     }
-
+    
     async getAttendanceById(request) {
         const { id } = request.params;
         
@@ -1510,13 +1517,14 @@ class KindergartenService {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,
             role,
             ...whereConditions 
         } = request.body;
 
         const { offset } = paginate(page, limit);
         
-        if (phone_number || full_name || kindergarten_name || role) {
+        if (phone_number || full_name || kindergarten_name || group_id || role) {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request?.user?.id,
@@ -1540,6 +1548,7 @@ class KindergartenService {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,
             role,
             ...whereConditions
         });
@@ -1563,6 +1572,7 @@ class KindergartenService {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,  // ✅ ДОДАТИ
             role = 'educator'
         } = request.body;
 
@@ -1572,10 +1582,25 @@ class KindergartenService {
             throw new Error('Адміністратор з таким номером телефону вже існує');
         }
 
+        // ✅ ДОДАТИ: Валідація group_id
+        if (group_id) {
+            // Перевіряємо чи існує група
+            const existingGroup = await KindergartenRepository.getGroupById(group_id);
+            if (!existingGroup || existingGroup.length === 0) {
+                throw new Error('Групу не знайдено');
+            }
+
+            // ✅ КРИТИЧНА ПЕРЕВІРКА: Чи група належить вибраному садочку
+            if (existingGroup[0].kindergarten_name !== kindergarten_name) {
+                throw new Error(`Група "${existingGroup[0].group_name}" не належить садочку "${kindergarten_name}"`);
+            }
+        }
+
         const adminData = {
             phone_number,
             full_name,
             kindergarten_name,
+            group_id,  // ✅ ДОДАТИ
             role,
             created_at: new Date()
         };
@@ -1616,6 +1641,26 @@ class KindergartenService {
 
             if (duplicateAdmin && duplicateAdmin.length > 0) {
                 throw new Error('Адміністратор з таким номером телефону вже існує');
+            }
+        }
+
+        // ✅ ДОДАТИ: Валідація group_id при оновленні
+        if (updateData.group_id !== undefined) {
+            // Якщо group_id = null, дозволяємо (видалення прив'язки)
+            if (updateData.group_id !== null) {
+                // Перевіряємо чи існує група
+                const existingGroup = await KindergartenRepository.getGroupById(updateData.group_id);
+                if (!existingGroup || existingGroup.length === 0) {
+                    throw new Error('Групу не знайдено');
+                }
+
+                // ✅ КРИТИЧНА ПЕРЕВІРКА: Визначаємо kindergarten_name
+                const kindergartenName = updateData.kindergarten_name || existingAdmin[0].kindergarten_name;
+
+                // Перевіряємо чи група належить садочку
+                if (existingGroup[0].kindergarten_name !== kindergartenName) {
+                    throw new Error(`Група "${existingGroup[0].group_name}" не належить садочку "${kindergartenName}"`);
+                }
             }
         }
 
@@ -1666,6 +1711,37 @@ class KindergartenService {
     }
 
     // ===============================
+    // ОТРИМАННЯ ГРУП ПО САДОЧКУ
+    // ===============================
+
+    async getGroupsByKindergarten(request) {
+        const { kindergarten_name } = request.body;
+
+        if (!kindergarten_name) {
+            throw new Error('Назва садочка обов\'язкова');
+        }
+
+        const groups = await KindergartenRepository.getGroupsByKindergarten(kindergarten_name);
+
+        // Логуємо пошук
+        await logRepository.createLog({
+            row_pk_id: null,
+            uid: request?.user?.id,
+            action: 'SEARCH',
+            client_addr: request?.ip,
+            application_name: `Отримання груп для садочку: ${kindergarten_name}`,
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'kindergarten_groups',
+            oid: '16505',
+        });
+
+        return groups;
+    }
+
+    // ===============================
     // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
     // ===============================
 
@@ -1701,11 +1777,11 @@ class KindergartenService {
                 throw new Error(`Помилка запиту до бази даних: ${dbError.message}`);
             }
 
-            // Логування
+            // Логування (тільки якщо є user ID)
             if (request?.user?.id) {
                 try {
                     await logRepository.createLog({
-                        row_pk_id: educator && educator.length > 0 ? educator[0].id : null,
+                        row_pk_id: educator ? educator.id : null,
                         uid: request.user.id,
                         action: 'SEARCH',
                         client_addr: request?.ip,
@@ -1724,17 +1800,21 @@ class KindergartenService {
                 console.warn('[verifyEducator] request.user.id not found - logging skipped');
             }
 
+            // Формуємо результат
             const result = {
-                isEducator: educator && educator.length > 0,
-                educatorInfo: educator && educator.length > 0 ? {
-                    id: educator[0].id,
-                    phone_number: educator[0].phone_number,
-                    full_name: educator[0].full_name,
-                    kindergarten_name: educator[0].kindergarten_name
+                is_educator: educator !== null,
+                educator: educator ? {
+                    id: educator.id,
+                    phone_number: educator.phone_number,
+                    full_name: educator.full_name,
+                    kindergarten_name: educator.kindergarten_name,
+                    group_id: educator.group_id,
+                    group_name: educator.group_name,
+                    children: educator.children || []
                 } : null
             };
 
-            console.log('[verifyEducator] Final result:', result);
+            console.log('[verifyEducator] Final result:', JSON.stringify(result, null, 2));
             
             return result;
 
