@@ -768,19 +768,24 @@ class KindergartenRepository {
             sort_direction = 'desc',
             payment_month_from,
             payment_month_to,
-            parent_name,
+            child_name,
+            kindergarten_name,
+            group_name,
             balance_min,
             balance_max
         } = options;
 
         const values = [];
+        
         let sql = `
             select json_agg(rw) as data,
                 max(cnt) as count
                 from (
                 select json_build_object(
                     'id', kb.id,
-                    'parent_name', kb.parent_name,
+                    'child_name', kb.child_name,
+                    'kindergarten_name', kg.kindergarten_name,
+                    'group_name', kg.group_name,
                     'payment_month', kb.payment_month,
                     'current_debt', kb.current_debt,
                     'current_accrual', kb.current_accrual,
@@ -792,10 +797,11 @@ class KindergartenRepository {
                 ) as rw,
                 count(*) over () as cnt
             from ower.kindergarten_billing kb
+            left join ower.children_roster cr on cr.child_name = kb.child_name
+            left join ower.kindergarten_groups kg on kg.id = cr.group_id
             where 1=1
         `;
 
-        // Додаємо фільтри
         if (payment_month_from) {
             sql += ` AND kb.payment_month >= ?`;
             values.push(payment_month_from);
@@ -806,9 +812,19 @@ class KindergartenRepository {
             values.push(payment_month_to);
         }
 
-        if (parent_name) {
-            sql += ` AND kb.parent_name ILIKE ?`;
-            values.push(`%${parent_name}%`);
+        if (child_name) {
+            sql += ` AND kb.child_name ILIKE ?`;
+            values.push(`%${child_name}%`);
+        }
+
+        if (kindergarten_name) {
+            sql += ` AND kg.kindergarten_name ILIKE ?`;
+            values.push(`%${kindergarten_name}%`);
+        }
+
+        if (group_name) {
+            sql += ` AND kg.group_name ILIKE ?`;
+            values.push(`%${group_name}%`);
         }
 
         if (balance_min !== undefined && balance_min !== null) {
@@ -821,14 +837,20 @@ class KindergartenRepository {
             values.push(balance_max);
         }
 
-        // Додаємо сортування
-        const allowedSortFields = ['id', 'parent_name', 'payment_month', 'current_debt', 'current_accrual', 'current_payment', 'balance', 'created_at'];
+        const allowedSortFields = [
+            'id', 'child_name', 'payment_month', 'kindergarten_name', 'group_name',
+            'current_debt', 'current_accrual', 'current_payment', 'balance', 'created_at'
+        ];
         const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'payment_month';
-        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toLowerCase() : 'desc';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? 
+            sort_direction.toLowerCase() : 'desc';
 
-        sql += ` order by kb.${validSortBy} ${validSortDirection}`;
+        if (validSortBy === 'kindergarten_name' || validSortBy === 'group_name') {
+            sql += ` order by kg.${validSortBy} ${validSortDirection}`;
+        } else {
+            sql += ` order by kb.${validSortBy} ${validSortDirection}`;
+        }
 
-        // Додаємо ліміт та офсет
         sql += ` limit ? offset ? ) q`;
         values.push(limit, offset);
 
@@ -838,69 +860,65 @@ class KindergartenRepository {
     async getBillingById(id) {
         const sql = `
             SELECT 
-                id, 
-                parent_name, 
-                payment_month,
-                current_debt,
-                current_accrual,
-                current_payment,
-                balance,
-                notes,
-                created_at,
-                updated_at
-            FROM ower.kindergarten_billing 
-            WHERE id = ?
+                kb.id, 
+                kb.child_name,
+                kg.kindergarten_name,
+                kg.group_name,
+                kb.payment_month,
+                kb.current_debt,
+                kb.current_accrual,
+                kb.current_payment,
+                kb.balance,
+                kb.notes,
+                kb.created_at,
+                kb.updated_at
+            FROM ower.kindergarten_billing kb
+            LEFT JOIN ower.children_roster cr ON cr.child_name = kb.child_name
+            LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+            WHERE kb.id = ?
         `;
         return await sqlRequest(sql, [id]);
     }
 
-    /**async getBillingByParentAndMonth(parent_name, payment_month) {
-        const sql = `
-            SELECT id, parent_name, payment_month
-            FROM ower.kindergarten_billing 
-            WHERE parent_name = ? AND payment_month = ?
-        `;
-        return await sqlRequest(sql, [parent_name, payment_month]);
-    }**/
-
-    async getBillingByParentAndMonth(parent_name, payment_month, excludeId = null) {
+    async getBillingByChildAndMonth(child_name, payment_month, excludeId = null) {
         let sql = `
             SELECT 
-                id, 
-                parent_name, 
-                payment_month,
-                current_debt,
-                current_accrual,
-                current_payment,
-                (current_debt + current_accrual - current_payment) as balance,
-                notes
-            FROM ower.kindergarten_billing 
-            WHERE parent_name = ? AND payment_month = ?
+                kb.id, 
+                kb.child_name, 
+                kb.payment_month,
+                kb.current_debt,
+                kb.current_accrual,
+                kb.current_payment,
+                (kb.current_debt + kb.current_accrual - kb.current_payment) as balance,
+                kb.notes
+            FROM ower.kindergarten_billing kb
+            WHERE kb.child_name = ? AND kb.payment_month = ?
         `;
         
-        const params = [parent_name, payment_month];
+        const params = [child_name, payment_month];
         
         // Додатково виключаємо поточний запис при оновленні
         if (excludeId) {
-            sql += ` AND id != ?`;
+            sql += ` AND kb.id != ?`;
             params.push(excludeId);
         }
         
         return await sqlRequest(sql, params);
     }
 
-    async getBillingByParentAndMonthExcludeId(parent_name, payment_month, excludeId) {
+
+    /*async getBillingByParentAndMonthExcludeId(parent_name, payment_month, excludeId) {
         const sql = `
             SELECT id, parent_name, payment_month
             FROM ower.kindergarten_billing 
             WHERE parent_name = ? AND payment_month = ? AND id != ?
         `;
         return await sqlRequest(sql, [parent_name, payment_month, excludeId]);
-    }
+    }*/
 
     async createBilling(billingData) {
         const {
-            parent_name,
+            child_name,
             payment_month,
             current_debt,
             current_accrual,
@@ -910,7 +928,7 @@ class KindergartenRepository {
         } = billingData;
 
         const values = [
-            parent_name,
+            child_name,
             payment_month,
             current_debt || 0,
             current_accrual || 0,
@@ -920,9 +938,9 @@ class KindergartenRepository {
 
         const sql = `
             INSERT INTO ower.kindergarten_billing 
-            (parent_name, payment_month, current_debt, current_accrual, current_payment, notes) 
+            (child_name, payment_month, current_debt, current_accrual, current_payment, notes) 
             VALUES (?, ?, ?, ?, ?, ?)
-            RETURNING id, parent_name, payment_month, current_debt, current_accrual, current_payment, balance, notes, created_at
+            RETURNING id, child_name, payment_month, current_debt, current_accrual, current_payment, balance, notes, created_at
         `;
         
         return await sqlRequest(sql, values);
@@ -930,7 +948,7 @@ class KindergartenRepository {
 
     async updateBilling(id, updateData) {
         const allowedFields = [
-            'parent_name', 
+            'child_name',
             'payment_month', 
             'current_debt', 
             'current_accrual', 
@@ -958,7 +976,7 @@ class KindergartenRepository {
             UPDATE ower.kindergarten_billing 
             SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-            RETURNING id, parent_name, payment_month, current_debt, current_accrual, current_payment, balance, notes, updated_at
+            RETURNING id, child_name, payment_month, current_debt, current_accrual, current_payment, balance, notes, updated_at
         `;
         
         return await sqlRequest(sql, values);
@@ -974,7 +992,7 @@ class KindergartenRepository {
         return await sqlRequest(sql, [id]);
     }
 
-    async getBillingStatsByParent(parentName, dateFrom = null, dateTo = null) {
+    async getBillingStatsByChild(childName, dateFrom = null, dateTo = null) {
         let sql = `
             SELECT 
                 COUNT(*) as total_records,
@@ -984,9 +1002,9 @@ class KindergartenRepository {
                 SUM(balance) as total_balance,
                 AVG(balance) as avg_balance
             FROM ower.kindergarten_billing 
-            WHERE parent_name = ?
+            WHERE child_name = ?
         `;
-        const values = [parentName];
+        const values = [childName];
 
         if (dateFrom) {
             sql += ` AND payment_month >= ?`;
@@ -1864,6 +1882,158 @@ class KindergartenRepository {
     async archiveYesterdayAttendance() {
         const sql = `SELECT ower.archive_yesterday_attendance()`;
         return await sqlRequest(sql);
+    }
+
+    async syncBillingForMonth(child_name, payment_month) {
+        try {
+            console.log(`🔄 Синхронізація billing для ${child_name} за ${payment_month}`);
+            
+            // 1️⃣ Отримати child_id
+            const sqlGetChild = `SELECT id FROM ower.children_roster WHERE child_name = $1`;
+            const childResult = await sqlRequest(sqlGetChild, [child_name]);
+            if (!childResult || childResult.length === 0) {
+                console.log(`⚠️ Дитину не знайдено`);
+                return null;
+            }
+
+            const child_id = childResult[0].id;
+
+            // 2️⃣ Агрегувати payment_statements (ЗАВЖДИ, навіть якщо 0)
+            const sqlAggregate = `
+                SELECT COALESCE(SUM(payment_amount), 0) as total_amount
+                FROM ower.payment_statements
+                WHERE child_id = $1 
+                AND TO_CHAR(date, 'YYYY-MM') = $2
+            `;
+            const aggregateResult = await sqlRequest(sqlAggregate, [child_id, payment_month]);
+            
+            const current_accrual = parseFloat(aggregateResult[0].total_amount) || 0;
+            
+            console.log(`📊 Нарахування за місяць: ${current_accrual} ₴`);
+
+            // 3️⃣ Перевірити чи є запис у billing
+            const sqlCheck = `
+                SELECT id FROM ower.kindergarten_billing
+                WHERE child_name = $1 
+                AND TO_CHAR(payment_month, 'YYYY-MM') = $2
+            `;
+            const existing = await sqlRequest(sqlCheck, [child_name, payment_month]);
+
+            if (existing && existing.length > 0) {
+                // ОНОВИТИ (навіть якщо 0)
+                await sqlRequest(
+                    `UPDATE ower.kindergarten_billing 
+                    SET current_accrual = $1, updated_at = NOW() 
+                    WHERE id = $2`,
+                    [current_accrual, existing[0].id]
+                );
+                console.log(`✅ Оновлено billing: ${current_accrual} ₴`);
+                return { action: 'updated', billing_id: existing[0].id, current_accrual };
+            } else if (current_accrual > 0) {
+                // СТВОРИТИ (тільки якщо є нарахування)
+                const result = await sqlRequest(
+                    `INSERT INTO ower.kindergarten_billing 
+                    (child_name, payment_month, current_debt, current_accrual, current_payment, notes, created_at, updated_at)
+                    VALUES ($1, $2, 0, $3, 0, 'Автоматично', NOW(), NOW())
+                    RETURNING id`,
+                    [child_name, `${payment_month}-01`, current_accrual]
+                );
+                console.log(`✅ Створено billing: ${current_accrual} ₴`);
+                return { action: 'created', billing_id: result[0].id, current_accrual };
+            }
+            
+            console.log(`ℹ️ Немає нарахувань, запис не створено`);
+            return null;
+        } catch (error) {
+            console.error('❌ Помилка:', error);
+            throw error;
+        }
+    }
+
+    async syncAllBillingRecords() {
+        try {
+            console.log('🔄 Універсальна синхронізація ВСІХ billing записів');
+            
+            const sqlGetAll = `
+                SELECT DISTINCT 
+                    cr.child_name,
+                    TO_CHAR(ps.date, 'YYYY-MM') as payment_month
+                FROM ower.payment_statements ps
+                JOIN ower.children_roster cr ON cr.id = ps.child_id
+                ORDER BY payment_month DESC, cr.child_name
+            `;
+            const allRecords = await sqlRequest(sqlGetAll);
+            
+            if (!allRecords || allRecords.length === 0) {
+                console.log('⚠️ Немає даних у payment_statements для синхронізації');
+                return {
+                    success: true,
+                    message: 'Немає даних для синхронізації',
+                    synced_count: 0,
+                    created_count: 0,
+                    updated_count: 0,
+                    error_count: 0,
+                    results: []
+                };
+            }
+            
+            console.log(`📊 Знайдено ${allRecords.length} унікальних комбінацій (дитина + місяць)`);
+            
+            let created_count = 0;
+            let updated_count = 0;
+            let error_count = 0;
+            const results = [];
+            
+            // 2️⃣ Синхронізувати кожну комбінацію
+            for (const record of allRecords) {
+                try {
+                    const result = await this.syncBillingForMonth(
+                        record.child_name,
+                        record.payment_month
+                    );
+                    
+                    if (result) {
+                        if (result.action === 'created') {
+                            created_count++;
+                        } else if (result.action === 'updated') {
+                            updated_count++;
+                        }
+                        results.push(result);
+                    }
+                } catch (error) {
+                    error_count++;
+                    console.error(`❌ Помилка синхронізації ${record.child_name} за ${record.payment_month}:`, error);
+                    results.push({
+                        action: 'error',
+                        child_name: record.child_name,
+                        payment_month: record.payment_month,
+                        error: error.message
+                    });
+                }
+            }
+            
+            const synced_count = created_count + updated_count;
+            
+            console.log(`✅ Синхронізація завершена:`);
+            console.log(`   Всього: ${allRecords.length}`);
+            console.log(`   Створено: ${created_count}`);
+            console.log(`   Оновлено: ${updated_count}`);
+            console.log(`   Помилок: ${error_count}`);
+            
+            return {
+                success: true,
+                message: `Синхронізовано ${synced_count} записів (створено: ${created_count}, оновлено: ${updated_count})`,
+                total_count: allRecords.length,
+                synced_count,
+                created_count,
+                updated_count,
+                error_count,
+                results
+            };
+        } catch (error) {
+            console.error('❌ Помилка універсальної синхронізації:', error);
+            throw error;
+        }
     }
 }
 

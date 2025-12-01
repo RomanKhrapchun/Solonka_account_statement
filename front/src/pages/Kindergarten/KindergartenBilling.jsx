@@ -114,7 +114,7 @@ const KindergartenBilling = () => {
         isOpen: false,
         loading: false,
         formData: {
-            parent_name: '',
+            child_name: '',
             payment_month: '',
             current_debt: '',
             current_accrual: '',
@@ -128,7 +128,7 @@ const KindergartenBilling = () => {
         loading: false,
         billingId: null,
         formData: {
-            parent_name: '',
+            child_name: '',
             payment_month: '',
             current_debt: '',
             current_accrual: '',
@@ -141,7 +141,7 @@ const KindergartenBilling = () => {
         isOpen: false,
         loading: false,
         billingId: null,
-        parentName: '',
+        child_name: '',
         paymentMonth: ''
     });
 
@@ -228,7 +228,9 @@ const KindergartenBilling = () => {
     };
 
     const columnTable = useMemo(() => [
-        createSortableColumn('ПІБ батьків', 'parent_name', null, '200px'),
+        // ✅ ЗМІНЕНО: 'ПІБ батьків' → 'ПІБ дитини', 'child_name' → 'child_name'
+        createSortableColumn('ПІБ дитини', 'child_name', null, '200px'),
+        
         createSortableColumn('Місяць оплати', 'payment_month', (value) => {
             if (!value) return '-';
             
@@ -250,6 +252,20 @@ const KindergartenBilling = () => {
                 return value;
             }
         }, '150px'),
+        
+        {
+            title: 'Садочок',
+            dataIndex: 'kindergarten_name',
+            width: '180px',
+            render: (value) => value || '-'
+        },
+        {
+            title: 'Група',
+            dataIndex: 'group_name',
+            width: '150px',
+            render: (value) => value || '-'
+        },
+
         createSortableColumn('Борг', 'current_debt', (value) => {
             return `${parseFloat(value || 0).toFixed(2)} ₴`;
         }, '120px'),
@@ -297,7 +313,9 @@ const KindergartenBilling = () => {
             return data.items.map((el) => ({
                 key: el.id,
                 id: el.id,
-                parent_name: el.parent_name,
+                child_name: el.child_name,
+                kindergarten_name: el.kindergarten_name,
+                group_name: el.group_name,
                 payment_month: el.payment_month,
                 current_debt: el.current_debt,
                 current_accrual: el.current_accrual,
@@ -455,7 +473,7 @@ const KindergartenBilling = () => {
             ...prev,
             isOpen: true,
             formData: {
-                parent_name: '',
+                child_name: '',
                 payment_month: '',
                 current_debt: '',
                 current_accrual: '',
@@ -466,8 +484,20 @@ const KindergartenBilling = () => {
         document.body.style.overflow = 'hidden';
     };
 
+
     const closeModal = () => {
-        setModalState(prev => ({ ...prev, isOpen: false }));
+        setModalState({
+            isOpen: false,
+            loading: false,
+            formData: {
+                child_name: '',
+                payment_month: '',
+                current_debt: '',
+                current_accrual: '',
+                current_payment: '',
+                notes: ''
+            }
+        });
         document.body.style.overflow = 'auto';
     };
 
@@ -482,9 +512,9 @@ const KindergartenBilling = () => {
     };
 
     const handleSaveBilling = async () => {
-        const { parent_name, payment_month, current_debt, current_accrual, current_payment } = modalState.formData;
+        const { child_name, payment_month, current_debt, current_accrual, current_payment } = modalState.formData;
         
-        if (!parent_name.trim() || !payment_month) {
+        if (!child_name.trim() || !payment_month) {
             notification({
                 type: 'warning',
                 placement: 'top',
@@ -504,7 +534,7 @@ const KindergartenBilling = () => {
                     'Authorization': `Bearer ${store.token}`
                 },
                 body: JSON.stringify({
-                    parent_name: parent_name.trim(),
+                    child_name: child_name.trim(),
                     payment_month,
                     current_debt: parseFloat(current_debt || 0),
                     current_accrual: parseFloat(current_accrual || 0),
@@ -515,7 +545,6 @@ const KindergartenBilling = () => {
 
             const result = await response.json();
 
-            // ✅ Перевірка на дублікат
             if (response.status === 409 && result.error === 'DUPLICATE_BILLING' && result.existingData) {
                 console.log('🔍 Duplicate found:', result.existingData);
                 
@@ -525,7 +554,7 @@ const KindergartenBilling = () => {
                     isOpen: true,
                     existingData: result.existingData,
                     newData: {
-                        parent_name: parent_name.trim(),
+                        child_name: child_name.trim(),
                         payment_month,
                         current_debt: parseFloat(current_debt || 0),
                         current_accrual: parseFloat(current_accrual || 0),
@@ -547,6 +576,8 @@ const KindergartenBilling = () => {
                 message: 'Запис успішно додано',
             });
 
+            setModalState(prev => ({ ...prev, loading: false }));
+
             closeModal();
             
             retryFetch('api/kindergarten/billing/filter', {
@@ -556,13 +587,15 @@ const KindergartenBilling = () => {
 
         } catch (error) {
             console.error('❌ Save error:', error);
+            
+            setModalState(prev => ({ ...prev, loading: false }));
+            
             notification({
                 type: 'error',
                 placement: 'top',
                 title: 'Помилка',
                 message: error.message || 'Не вдалося додати запис',
             });
-            setModalState(prev => ({ ...prev, loading: false }));
         }
     };
 
@@ -572,7 +605,7 @@ const KindergartenBilling = () => {
             loading: false,
             billingId: record.id,
             formData: {
-                parent_name: record.parent_name,
+                child_name: record.child_name,
                 payment_month: record.payment_month,
                 current_debt: record.current_debt,
                 current_accrual: record.current_accrual,
@@ -584,7 +617,19 @@ const KindergartenBilling = () => {
     };
 
     const closeEditModal = () => {
-        setEditModalState(prev => ({ ...prev, isOpen: false }));
+        setEditModalState({
+            isOpen: false,
+            loading: false,
+            billingId: null,
+            formData: {
+                child_name: '',
+                payment_month: '',
+                current_debt: '',
+                current_accrual: '',
+                current_payment: '',
+                notes: ''
+            }
+        });
         document.body.style.overflow = 'auto';
     };
 
@@ -599,9 +644,9 @@ const KindergartenBilling = () => {
     };
 
     const handleUpdateBilling = async () => {
-        const { parent_name, payment_month, current_debt, current_accrual, current_payment } = editModalState.formData;
+        const { child_name, payment_month, current_debt, current_accrual, current_payment } = editModalState.formData;
         
-        if (!parent_name.trim() || !payment_month) {
+        if (!child_name.trim() || !payment_month) {
             notification({
                 type: 'warning',
                 placement: 'top',
@@ -617,7 +662,7 @@ const KindergartenBilling = () => {
             await fetchFunction(`api/kindergarten/billing/${editModalState.billingId}`, {
                 method: 'PUT',
                 data: {
-                    parent_name: parent_name.trim(),
+                    child_name: child_name.trim(),
                     payment_month,
                     current_debt: parseFloat(current_debt || 0),
                     current_accrual: parseFloat(current_accrual || 0),
@@ -633,6 +678,8 @@ const KindergartenBilling = () => {
                 message: 'Запис успішно оновлено',
             });
 
+            setEditModalState(prev => ({ ...prev, loading: false }));
+
             closeEditModal();
             
             retryFetch('api/kindergarten/billing/filter', {
@@ -641,14 +688,14 @@ const KindergartenBilling = () => {
             });
 
         } catch (error) {
+            setEditModalState(prev => ({ ...prev, loading: false }));
+            
             notification({
                 type: 'error',
                 placement: 'top',
                 title: 'Помилка',
                 message: error.message || 'Не вдалося оновити запис',
             });
-        } finally {
-            setEditModalState(prev => ({ ...prev, loading: false }));
         }
     };
 
@@ -657,14 +704,20 @@ const KindergartenBilling = () => {
             isOpen: true,
             loading: false,
             billingId: record.id,
-            parentName: record.parent_name,
+            child_name: record.child_name,
             paymentMonth: record.payment_month
         });
         document.body.style.overflow = 'hidden';
     };
 
     const closeDeleteModal = () => {
-        setDeleteModalState(prev => ({ ...prev, isOpen: false }));
+        setDeleteModalState({
+            isOpen: false,
+            loading: false,
+            billingId: null,
+            child_name: '',
+            paymentMonth: ''
+        });
         document.body.style.overflow = 'auto';
     };
 
@@ -683,6 +736,8 @@ const KindergartenBilling = () => {
                 message: 'Запис успішно видалено',
             });
 
+            setDeleteModalState(prev => ({ ...prev, loading: false }));
+
             closeDeleteModal();
             
             retryFetch('api/kindergarten/billing/filter', {
@@ -691,14 +746,14 @@ const KindergartenBilling = () => {
             });
 
         } catch (error) {
+            setDeleteModalState(prev => ({ ...prev, loading: false }));
+            
             notification({
                 type: 'error',
                 placement: 'top',
                 title: 'Помилка',
                 message: error.message || 'Не вдалося видалити запис',
             });
-        } finally {
-            setDeleteModalState(prev => ({ ...prev, loading: false }));
         }
     };
 
@@ -714,9 +769,15 @@ const KindergartenBilling = () => {
     };
 
     const closePdfModal = () => {
-        setPdfModalState(prev => ({ ...prev, isOpen: false }));
+        setPdfModalState({
+            isOpen: false,
+            loading: false,
+            file: null,
+            parsedData: null
+        });
         document.body.style.overflow = 'auto';
     };
+
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -782,6 +843,7 @@ const KindergartenBilling = () => {
 
         } catch (error) {
             setPdfModalState(prev => ({ ...prev, loading: false }));
+            
             notification({
                 type: 'error',
                 placement: 'top',
@@ -826,7 +888,7 @@ const KindergartenBilling = () => {
             isOpen: true,
             loading: false,
             formData: {
-                parent_name: data.parent_name || '',
+                child_name: data.child_name || '',
                 payment_month: paymentMonth,
                 current_debt: data.current_debt || 0,
                 current_accrual: data.current_accrual || 0,
@@ -982,21 +1044,27 @@ const KindergartenBilling = () => {
                         title="Додати запис батьківської плати"
                     >
                         <div className="modal-form">
+                            {/* ✅ ПІБ дитини */}
                             <div className="form-section">
+                                <label className="form-label">
+                                    ПІБ дитини <span className="required">*</span>
+                                </label>
                                 <Input
-                                    label="ПІБ батька"
-                                    placeholder="Введіть ПІБ"
-                                    name="parent_name"
-                                    value={modalState.formData.parent_name}
+                                    placeholder="Введіть ПІБ дитини"
+                                    name="child_name"
+                                    value={modalState.formData.child_name}
                                     onChange={handleModalInputChange}
                                     required
                                 />
                             </div>
-                            
+
+                            {/* ✅ Місяць оплати */}
                             <div className="form-section">
+                                <label className="form-label">
+                                    Місяць оплати <span className="required">*</span>
+                                </label>
                                 <Input
                                     type="month"
-                                    label="Місяць оплати"
                                     name="payment_month"
                                     value={modalState.formData.payment_month}
                                     onChange={handleModalInputChange}
@@ -1004,11 +1072,12 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Борг */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Борг (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Борг (₴)"
                                     placeholder="0.00"
                                     name="current_debt"
                                     value={modalState.formData.current_debt}
@@ -1016,11 +1085,12 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Нараховання */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Нараховання (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Нараховання (₴)"
                                     placeholder="0.00"
                                     name="current_accrual"
                                     value={modalState.formData.current_accrual}
@@ -1028,24 +1098,15 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Оплачено */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Оплачено (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Оплачено (₴)"
                                     placeholder="0.00"
                                     name="current_payment"
                                     value={modalState.formData.current_payment}
-                                    onChange={handleModalInputChange}
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <Input
-                                    label="Примітки"
-                                    placeholder="Додаткова інформація"
-                                    name="notes"
-                                    value={modalState.formData.notes}
                                     onChange={handleModalInputChange}
                                 />
                             </div>
@@ -1068,21 +1129,27 @@ const KindergartenBilling = () => {
                         title="Редагувати запис"
                     >
                         <div className="modal-form">
+                            {/* ✅ ПІБ дитини */}
                             <div className="form-section">
+                                <label className="form-label">
+                                    ПІБ дитини <span className="required">*</span>
+                                </label>
                                 <Input
-                                    label="ПІБ батька"
-                                    placeholder="Введіть ПІБ"
-                                    name="parent_name"
-                                    value={editModalState.formData.parent_name}
+                                    placeholder="Введіть ПІБ дитини"
+                                    name="child_name"
+                                    value={editModalState.formData.child_name}
                                     onChange={handleEditInputChange}
                                     required
                                 />
                             </div>
                             
+                            {/* ✅ Місяць оплати */}
                             <div className="form-section">
+                                <label className="form-label">
+                                    Місяць оплати <span className="required">*</span>
+                                </label>
                                 <Input
                                     type="month"
-                                    label="Місяць оплати"
                                     name="payment_month"
                                     value={editModalState.formData.payment_month}
                                     onChange={handleEditInputChange}
@@ -1090,11 +1157,12 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Борг */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Борг (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Борг (₴)"
                                     placeholder="0.00"
                                     name="current_debt"
                                     value={editModalState.formData.current_debt}
@@ -1102,11 +1170,12 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Нараховання */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Нараховання (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Нараховання (₴)"
                                     placeholder="0.00"
                                     name="current_accrual"
                                     value={editModalState.formData.current_accrual}
@@ -1114,24 +1183,15 @@ const KindergartenBilling = () => {
                                 />
                             </div>
 
+                            {/* ✅ Оплачено */}
                             <div className="form-section form-section--highlighted">
+                                <label className="form-label">Оплачено (₴)</label>
                                 <Input
                                     type="number"
                                     step="0.01"
-                                    label="Оплачено (₴)"
                                     placeholder="0.00"
                                     name="current_payment"
                                     value={editModalState.formData.current_payment}
-                                    onChange={handleEditInputChange}
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <Input
-                                    label="Примітки"
-                                    placeholder="Додаткова інформація"
-                                    name="notes"
-                                    value={editModalState.formData.notes}
                                     onChange={handleEditInputChange}
                                 />
                             </div>
@@ -1154,7 +1214,7 @@ const KindergartenBilling = () => {
                         title="Підтвердження видалення"
                     >
                         <p>
-                            Ви впевнені, що хочете видалити запис для <strong>{deleteModalState.parentName}</strong> за <strong>{deleteModalState.paymentMonth}</strong>?
+                            Ви впевнені, що хочете видалити запис для <strong>{deleteModalState.child_name}</strong> за <strong>{deleteModalState.paymentMonth}</strong>?
                         </p>
                     </Modal>
                 )}
@@ -1240,7 +1300,7 @@ const KindergartenBilling = () => {
                                     </h4>
                                     <div style={{ fontSize: '14px', lineHeight: '1.8' }}>
                                         <p style={{ marginBottom: '8px' }}>
-                                            <strong>ПІБ:</strong> {pdfModalState.parsedData.parent_name}
+                                            <strong>ПІБ:</strong> {pdfModalState.parsedData.child_name}
                                         </p>
                                         <p style={{ marginBottom: '8px' }}>
                                             <strong>Борг:</strong> {pdfModalState.parsedData.current_debt} ₴
@@ -1274,7 +1334,7 @@ const KindergartenBilling = () => {
                     >
                         <div style={{ padding: '20px' }}>
                             <p style={{ fontSize: '16px', marginBottom: '20px', fontWeight: '500' }}>
-                                Запис для <strong>{duplicateModalState.existingData?.parent_name}</strong> за цей місяць вже існує:
+                                Запис для <strong>{duplicateModalState.existingData?.child_name}</strong> за цей місяць вже існує:
                             </p>
                             
                             <div style={{

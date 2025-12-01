@@ -563,7 +563,7 @@ class KindergartenController {
             if (error.message === 'DUPLICATE_BILLING' && error.existingData) {
                 return reply.status(409).send({ 
                     error: 'DUPLICATE_BILLING',
-                    message: 'Запис для цього батька та місяця вже існує',
+                    message: 'Запис для цієї дитини та місяця вже існує',
                     existingData: error.existingData
                 });
             }
@@ -1010,7 +1010,7 @@ class KindergartenController {
             const monthMatch = text.match(/(Січень|Лютий|Березень|Квітень|Травень|Червень|Липень|Серпень|Вересень|Жовтень|Листопад|Грудень)\s+(\d{4})/i);
             
             const parsedData = {
-                parent_name: nameMatch ? nameMatch[1].trim() : null,
+                child_name: nameMatch ? nameMatch[1].trim() : null,
                 current_debt: debt,
                 current_accrual: accrued,
                 current_payment: paid,
@@ -1019,7 +1019,7 @@ class KindergartenController {
             
             console.log('✅ Parsed data:', parsedData);
             
-            if (!parsedData.parent_name) {
+            if (!parsedData.child_name) {
                 throw new Error('Не вдалося розпізнати ПІБ з квитанції');
             }
             
@@ -1132,7 +1132,7 @@ class KindergartenController {
         }
     }   
 
-     // ===============================
+    // ===============================
     // ОТРИМАННЯ ГРУП ПО САДОЧКУ
     // ===============================
 
@@ -1144,6 +1144,19 @@ class KindergartenController {
             Logger.error(error.message, { stack: error.stack });
             reply.status(400).send({ 
                 error: 'Failed to fetch groups',
+                message: error.message 
+            });
+        }
+    }
+
+    async syncAllBilling(request, reply) {
+        try {
+            const result = await kindergartenService.syncAllBilling(request);
+            reply.status(200).send(result);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to sync all billing',
                 message: error.message 
             });
         }

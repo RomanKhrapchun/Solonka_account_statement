@@ -336,6 +336,10 @@ const routes = async (fastify) => {
         schema: groupsByKindergartenSchema,
         preParsing: RouterGuard()
     }, kindergartenController.getGroupsByKindergarten);
+
+    fastify.post("/billing/sync-all", { 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
+    }, kindergartenController.syncAllBilling);
 }
 
 module.exports = routes;

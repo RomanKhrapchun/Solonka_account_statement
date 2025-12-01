@@ -555,7 +555,17 @@ const billingFilterSchema = {
             type: 'string',
             optional: true,
         },
-        parent_name: {
+        child_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        kindergarten_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        group_name: {
             type: 'string',
             optional: true,
             min: 1,
@@ -573,7 +583,7 @@ const billingFilterSchema = {
 
 const billingCreateSchema = {
     body: {
-        parent_name: {
+        child_name: {
             type: 'string',
             min: 1,
             max: 100,
@@ -609,7 +619,7 @@ const billingUpdateSchema = {
         },
     },
     body: {
-        parent_name: {
+        child_name: {
             type: 'string',
             min: 1,
             max: 100,
@@ -1120,6 +1130,32 @@ const pastAttendanceFilterSchema = {
     }
 };
 
+const billingSyncAllSchema = {
+    schema: {
+        summary: 'Універсальна синхронізація всіх billing записів',
+        description: 'Знаходить ВСІ payment_statements і синхронізує їх у billing. Не потребує параметрів - синхронізує все автоматично.',
+        tags: ['kindergarten'],
+        body: {
+            type: 'object',
+            properties: {}
+        },
+        response: {
+            200: {
+                type: 'object',
+                properties: {
+                    success: { type: 'boolean' },
+                    message: { type: 'string' },
+                    total_count: { type: 'integer' },
+                    synced_count: { type: 'integer' },
+                    created_count: { type: 'integer' },
+                    updated_count: { type: 'integer' },
+                    error_count: { type: 'integer' }
+                }
+            }
+        }
+    }
+};
+
 module.exports = {
     // Групи
     kindergartenGroupFilterSchema,
@@ -1180,4 +1216,6 @@ module.exports = {
     //Архівні відвідування
     pastAttendanceInfoSchema,
     pastAttendanceFilterSchema,
+
+    billingSyncAllSchema,
 };

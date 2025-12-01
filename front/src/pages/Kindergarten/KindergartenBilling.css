@@ -401,3 +401,31 @@
         font-size: 12px;
     }
 }
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    color: #333;
+}
+
+.form-label .required {
+    color: #ff4d4f;
+    margin-left: 4px;
+}
+
+.form-section {
+    margin-bottom: 16px;
+}
+
+.form-section--highlighted {
+    background: #f0f9ff;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.modal-form {
+    padding: 8px 0;
+}

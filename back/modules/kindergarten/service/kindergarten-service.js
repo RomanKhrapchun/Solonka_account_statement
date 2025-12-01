@@ -505,7 +505,6 @@ class KindergartenService {
             oid: '16507',
         });
 
-        // ✅ АВТОМАТИЧНО СТВОРЮЄМО PAYMENT_STATEMENT ЯКЩО ДИТИНА ПРИСУТНЯ
         if (attendance_status === 'present') {
             try {
                 console.log('🎯 Дитина присутня, створюємо payment_statement');
@@ -565,6 +564,14 @@ class KindergartenService {
 
                     await KindergartenRepository.createPaymentStatement(paymentData);
 
+                    try {
+                        const child_name = child.child_name;
+                        const payment_month = date.substring(0, 7);
+                        await KindergartenRepository.syncBillingForMonth(child_name, payment_month);
+                    } catch (syncError) {
+                        console.error('⚠️ Помилка синхронізації:', syncError);
+                    }
+
                     await logRepository.createLog({
                         row_pk_id: null,
                         uid: request?.user?.id,
@@ -591,11 +598,13 @@ class KindergartenService {
                     child_id
                 });
             }
-        } else {
-            console.log('ℹ️ Дитина не присутня (статус:', attendance_status, '), payment_statement не створюємо');
         }
 
-        return result;
+        return {
+            success: true,
+            message: 'Запис відвідуваності створено успішно',
+            data: result
+        };
     }
 
     async updateAttendance(request) {
@@ -679,6 +688,18 @@ class KindergartenService {
                     });
                     
                     console.log('✅ Payment statement видалено');
+
+                    try {
+                        const childData = await KindergartenRepository.getChildById(child_id);
+                        if (childData && childData.length > 0) {
+                            const child_name = childData[0].child_name;
+                            const payment_month = typeof date === 'string' ? date.substring(0, 7) : date.toISOString().substring(0, 7);
+                            await KindergartenRepository.syncBillingForMonth(child_name, payment_month);
+                            console.log('✅ Billing синхронізовано після видалення');
+                        }
+                    } catch (syncError) {
+                        console.error('⚠️ Помилка синхронізації:', syncError);
+                    }
                 }
             }
             
@@ -730,6 +751,18 @@ class KindergartenService {
                         });
                         
                         console.log('✅ Payment statement створено');
+
+                        try {
+                            const childData = await KindergartenRepository.getChildById(child_id);
+                            if (childData && childData.length > 0) {
+                                const child_name = childData[0].child_name;
+                                const payment_month = typeof date === 'string' ? date.substring(0, 7) : date.toISOString().substring(0, 7);
+                                await KindergartenRepository.syncBillingForMonth(child_name, payment_month);
+                                console.log('✅ Billing синхронізовано після створення');
+                            }
+                        } catch (syncError) {
+                            console.error('⚠️ Помилка синхронізації:', syncError);
+                        }
                     }
                 }
             }
@@ -1070,7 +1103,9 @@ class KindergartenService {
             sort_direction = 'desc',
             payment_month_from,
             payment_month_to,
-            parent_name,
+            child_name,
+            kindergarten_name,
+            group_name,
             balance_min,
             balance_max,
             ...whereConditions 
@@ -1078,7 +1113,7 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        if (payment_month_from || payment_month_to || parent_name || balance_min || balance_max) {
+        if (payment_month_from || payment_month_to || child_name || kindergarten_name || group_name || balance_min || balance_max) {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request?.user?.id,
@@ -1101,7 +1136,9 @@ class KindergartenService {
             sort_direction,
             payment_month_from,
             payment_month_to,
-            parent_name,
+            child_name,          // ✅ ЗМІНЕНО
+            kindergarten_name,   // ✅ ДОДАНО
+            group_name,         // ✅ ДОДАНО
             balance_min,
             balance_max,
             ...whereConditions
@@ -1109,6 +1146,7 @@ class KindergartenService {
 
         return paginationData(userData[0], page, limit);
     }
+
 
     async getBillingById(request) {
         const { id } = request.params;
@@ -1137,7 +1175,7 @@ class KindergartenService {
 
     async createBilling(request) {
         const {
-            parent_name,
+            child_name,
             payment_month,
             current_debt,
             current_accrual,
@@ -1145,29 +1183,26 @@ class KindergartenService {
             notes
         } = request.body;
 
-        // Конвертуємо "2025-06" в "2025-06-01"
         let formattedMonth = payment_month;
         if (payment_month && !payment_month.match(/^\d{4}-\d{2}-\d{2}$/)) {
             formattedMonth = `${payment_month}-01`;
         }
 
-        // Перевірка на дублікат
-        const existingBilling = await KindergartenRepository.getBillingByParentAndMonth(
-            parent_name,
+        const existingBilling = await KindergartenRepository.getBillingByChildAndMonth(
+            child_name,
             formattedMonth
         );
         
         if (existingBilling && existingBilling.length > 0) {
-            const existing = existingBilling[0]; // ✅ Важливо брати перший елемент
+            const existing = existingBilling[0];
             
-            console.log('🔍 Found existing billing:', existing); // DEBUG
+            console.log('🔍 Found existing billing:', existing);
             
-            // Створюємо помилку з даними
             const error = new Error('DUPLICATE_BILLING');
             error.statusCode = 409;
             error.existingData = {
                 id: existing.id,
-                parent_name: existing.parent_name,
+                child_name: existing.child_name,
                 payment_month: existing.payment_month,
                 current_debt: parseFloat(existing.current_debt) || 0,
                 current_accrual: parseFloat(existing.current_accrual) || 0,
@@ -1176,12 +1211,12 @@ class KindergartenService {
                 notes: existing.notes || ''
             };
             
-            console.log('📤 Sending existingData:', error.existingData); // DEBUG
+            console.log('📤 Sending existingData:', error.existingData);
             throw error;
         }
 
         const billingData = {
-            parent_name,
+            child_name,
             payment_month: formattedMonth,
             current_debt: parseFloat(current_debt) || 0,
             current_accrual: parseFloat(current_accrual) || 0,
@@ -1218,28 +1253,25 @@ class KindergartenService {
             throw new Error('Запис батьківської плати не знайдено');
         }
 
-        // ✅ Конвертуємо "2025-06" в "2025-06-01" для PostgreSQL DATE
         if (updateData.payment_month && !updateData.payment_month.match(/^\d{4}-\d{2}-\d{2}$/)) {
             updateData.payment_month = `${updateData.payment_month}-01`;
         }
 
-        // Перевірка на дублікат при зміні ПІБ або місяця
-        if (updateData.parent_name || updateData.payment_month) {
-            const checkName = updateData.parent_name || existingBilling[0].parent_name;
+        if (updateData.child_name || updateData.payment_month) {
+            const checkName = updateData.child_name || existingBilling[0].child_name;
             const checkMonth = updateData.payment_month || existingBilling[0].payment_month;
             
-            const duplicateBilling = await KindergartenRepository.getBillingByParentAndMonth(
+            const duplicateBilling = await KindergartenRepository.getBillingByChildAndMonth(
                 checkName,
                 checkMonth,
                 id
             );
 
             if (duplicateBilling && duplicateBilling.length > 0) {
-                throw new Error('Запис для цього батька та місяця вже існує');
+                throw new Error('Запис для цієї дитини та місяця вже існує');
             }
         }
 
-        // Конвертуємо числові значення
         if (updateData.current_debt !== undefined) {
             updateData.current_debt = parseFloat(updateData.current_debt) || 0;
         }
@@ -2300,6 +2332,21 @@ class KindergartenService {
             return { success: true, message: 'Архівування завершено' };
         } catch (error) {
             console.error('❌ Помилка архівування:', error);
+            throw error;
+        }
+    }
+
+    async syncAllBilling(request) {
+        console.log('🔄 Запит на універсальну синхронізацію всіх billing записів');
+        
+        try {
+            const result = await KindergartenRepository.syncAllBillingRecords();
+            
+            console.log('✅ Універсальна синхронізація завершена:', result);
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Помилка універсальної синхронізації:', error);
             throw error;
         }
     }
