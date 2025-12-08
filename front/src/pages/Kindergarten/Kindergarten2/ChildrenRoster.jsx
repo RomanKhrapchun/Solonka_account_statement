@@ -1,22 +1,22 @@
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom'
-import useFetch from "../../hooks/useFetch";
-import Table from "../../components/common/Table/Table";
-import {generateIcon, iconMap, STATUS} from "../../utils/constants.jsx";
-import Button from "../../components/common/Button/Button";
-import PageError from "../ErrorPage/PageError";
-import Pagination from "../../components/common/Pagination/Pagination";
-import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../utils/function";
-import {useNotification} from "../../hooks/useNotification";
-import {Context} from "../../main";
-import Dropdown from "../../components/common/Dropdown/Dropdown";
-import SkeletonPage from "../../components/common/Skeleton/SkeletonPage";
-import Modal from "../../components/common/Modal/Modal.jsx";
+import useFetch from "../../../hooks/useFetch";
+import Table from "../../../components/common/Table/Table";
+import {generateIcon, iconMap, STATUS} from "../../../utils/constants.jsx";
+import Button from "../../../components/common/Button/Button";
+import PageError from "../../ErrorPage/PageError";
+import Pagination from "../../../components/common/Pagination/Pagination";
+import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../../utils/function";
+import {useNotification} from "../../../hooks/useNotification";
+import {Context} from "../../../main";
+import Dropdown from "../../../components/common/Dropdown/Dropdown";
+import SkeletonPage from "../../../components/common/Skeleton/SkeletonPage";
+import Modal from "../../../components/common/Modal/Modal.jsx";
 import {Transition} from "react-transition-group";
-import Input from "../../components/common/Input/Input";
-import Select from "../../components/common/Select/Select";
-import FilterDropdown from "../../components/common/Dropdown/FilterDropdown";
-import "../../components/common/Dropdown/FilterDropdown.css";
+import Input from "../../../components/common/Input/Input";
+import Select from "../../../components/common/Select/Select";
+import FilterDropdown from "../../../components/common/Dropdown/FilterDropdown";
+import "../../../components/common/Dropdown/FilterDropdown.css";
 
 // Іконки
 const addIcon = generateIcon(iconMap.add, null, 'currentColor', 20, 20)
@@ -149,7 +149,7 @@ const ChildrenRoster = () => {
     const [groupsData, setGroupsData] = useState([]);
 
     const isFirstAPI = useRef(true);
-    const {error, status, data, retryFetch} = useFetch('api/kindergarten/childrenRoster/filter', {
+    const {error, status, data, retryFetch} = useFetch('api/kindergarten_2/childrenRoster/filter', {
         method: 'post',
         data: stateChildren.sendData
     })
@@ -163,7 +163,7 @@ const ChildrenRoster = () => {
             return;
         }
         
-        retryFetch('api/kindergarten/childrenRoster/filter', {
+        retryFetch('api/kindergarten_2/childrenRoster/filter', {
             method: 'post',
             data: stateChildren.sendData
         });
@@ -500,7 +500,7 @@ const ChildrenRoster = () => {
         setModalState(prev => ({ ...prev, loading: true }));
 
         try {
-            await fetchFunction('api/kindergarten/childrenRoster', {
+            await fetchFunction('api/kindergarten_2/childrenRoster', {
                 method: 'POST',
                 data: {
                     child_name: child_name.trim(),
@@ -520,7 +520,7 @@ const ChildrenRoster = () => {
             closeModal();
             
             // Оновлюємо список
-            retryFetch('api/kindergarten/childrenRoster/filter', {
+            retryFetch('api/kindergarten_2/childrenRoster/filter', {
                 method: 'post',
                 data: stateChildren.sendData,
             });
@@ -587,7 +587,7 @@ const ChildrenRoster = () => {
         setEditModalState(prev => ({ ...prev, loading: true }));
 
         try {
-            await fetchFunction(`api/kindergarten/childrenRoster/${editModalState.childId}`, {
+            await fetchFunction(`api/kindergarten_2/childrenRoster/${editModalState.childId}`, {
                 method: 'PUT',
                 data: {
                     child_name: child_name.trim(),
@@ -607,7 +607,7 @@ const ChildrenRoster = () => {
             closeEditModal();
             
             // Оновлюємо список
-            retryFetch('api/kindergarten/childrenRoster/filter', {
+            retryFetch('api/kindergarten_2/childrenRoster/filter', {
                 method: 'post',
                 data: stateChildren.sendData,
             });
@@ -644,7 +644,7 @@ const ChildrenRoster = () => {
         setDeleteModalState(prev => ({ ...prev, loading: true }));
 
         try {
-            await fetchFunction(`api/kindergarten/childrenRoster/${deleteModalState.childId}`, {
+            await fetchFunction(`api/kindergarten_2/childrenRoster/${deleteModalState.childId}`, {
                 method: 'DELETE'
             });
 
@@ -658,7 +658,7 @@ const ChildrenRoster = () => {
             closeDeleteModal();
             
             // Оновлюємо список
-            retryFetch('api/kindergarten/childrenRoster/filter', {
+            retryFetch('api/kindergarten_2/childrenRoster/filter', {
                 method: 'post',
                 data: stateChildren.sendData,
             });

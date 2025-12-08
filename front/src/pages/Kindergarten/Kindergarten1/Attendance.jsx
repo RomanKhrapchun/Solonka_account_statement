@@ -1,22 +1,22 @@
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom'
 import classNames from 'classnames';
-import useFetch from "../../hooks/useFetch";
-import Table from "../../components/common/Table/Table";
-import {generateIcon, iconMap, STATUS} from "../../utils/constants.jsx";
-import Button from "../../components/common/Button/Button";
-import PageError from "../ErrorPage/PageError";
-import Pagination from "../../components/common/Pagination/Pagination";
-import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../utils/function";
-import {useNotification} from "../../hooks/useNotification";
-import {Context} from "../../main";
-import Dropdown from "../../components/common/Dropdown/Dropdown";
-import SkeletonPage from "../../components/common/Skeleton/SkeletonPage";
+import useFetch from "../../../hooks/useFetch";
+import Table from "../../../components/common/Table/Table";
+import {generateIcon, iconMap, STATUS} from "../../../utils/constants.jsx";
+import Button from "../../../components/common/Button/Button";
+import PageError from "../../ErrorPage/PageError";
+import Pagination from "../../../components/common/Pagination/Pagination";
+import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../../utils/function";
+import {useNotification} from "../../../hooks/useNotification";
+import {Context} from "../../../main";
+import Dropdown from "../../../components/common/Dropdown/Dropdown";
+import SkeletonPage from "../../../components/common/Skeleton/SkeletonPage";
 import {Transition} from "react-transition-group";
-import Input from "../../components/common/Input/Input";
-import Select from "../../components/common/Select/Select";
-import FilterDropdown from "../../components/common/Dropdown/FilterDropdown";
-import "../../components/common/Dropdown/FilterDropdown.css";
+import Input from "../../../components/common/Input/Input";
+import Select from "../../../components/common/Select/Select";
+import FilterDropdown from "../../../components/common/Dropdown/FilterDropdown";
+import "../../../components/common/Dropdown/FilterDropdown.css";
 
 // Іконки
 const checkIcon = generateIcon(iconMap.check, null, 'currentColor', 16, 16)
@@ -156,7 +156,7 @@ const Attendance = () => {
     });
 
     const isFirstAPI = useRef(true);
-    const {error, status, data, retryFetch} = useFetch('api/kindergarten/attendance/filter', {
+    const {error, status, data, retryFetch} = useFetch('api/kindergarten_1/attendance/filter', {
         method: 'post',
         data: stateAttendance.sendData
     })
@@ -180,7 +180,7 @@ const Attendance = () => {
         }
         
         console.log('🔄 Викликаємо API з датою:', stateAttendance.sendData.date);
-        retryFetch('api/kindergarten/attendance/filter', {
+        retryFetch('api/kindergarten_1/attendance/filter', {
             method: 'post',
             data: stateAttendance.sendData
         });
@@ -224,14 +224,14 @@ const Attendance = () => {
         
         try {
             if (record.attendance_id) {
-                await fetchFunction(`api/kindergarten/attendance/${record.attendance_id}`, {
+                await fetchFunction(`api/kindergarten_1/attendance/${record.attendance_id}`, {
                     method: 'PUT',
                     data: {
                         attendance_status: newStatus
                     }
                 });
             } else {
-                await fetchFunction('api/kindergarten/attendance', {
+                await fetchFunction('api/kindergarten_1/attendance', {
                     method: 'POST',
                     data: {
                         date: currentDate,
@@ -248,7 +248,7 @@ const Attendance = () => {
                 message: 'Відвідуваність оновлено успішно',
             });
 
-            retryFetch('api/kindergarten/attendance/filter', {
+            retryFetch('api/kindergarten_1/attendance/filter', {
                 method: 'post',
                 data: stateAttendance.sendData,
             });

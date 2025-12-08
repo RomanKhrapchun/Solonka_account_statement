@@ -91,6 +91,8 @@ fastify.register(debtorRouter, { prefix: "/api/debtor" });
 fastify.register(utilitiesRouter, { prefix: "/api/utilities" });
 fastify.register(cnapRouter, { prefix: "/api/cnap" });
 fastify.register(kindergartenRouter, { prefix: "/api/kindergarten" });
+fastify.register(kindergartenRouter, { prefix: "/api/kindergarten_1" });
+fastify.register(kindergartenRouter, { prefix: "/api/kindergarten_2" });
 fastify.register(sportsComplexRouter, { prefix: "/api/sportscomplex" });
 fastify.register(revenueRouter, { prefix: "/api/revenue" });
 fastify.register(districtRouter, { prefix: "/api/districts" });

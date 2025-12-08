@@ -3,6 +3,68 @@ const { buildWhereCondition } = require("../../../utils/function");
 
 class KindergartenRepository {
 
+
+    /**
+     * Отримати назви таблиць в залежності від типу садочка
+     * @param {string|null} kindergartenType - '1', '2', або null
+     * @returns {object} - об'єкт з назвами таблиць
+     */
+    getTableNames(kindergartenType) {
+        if (kindergartenType === '1') {
+            return {
+                children: 'children_1_roster',
+                attendance: 'attendance_1',
+                pastAttendance: 'past_attendance_1',
+                groups: 'kindergarten_groups',
+                dailyFoodCost: 'daily_food_cost',
+                billing: 'kindergarten_billing',
+                paymentStatements: 'payment_statements',
+                admins: 'kindergarten_admins'
+            };
+        }
+        
+        if (kindergartenType === '2') {
+            return {
+                children: 'children_2_roster',
+                attendance: 'attendance_2',
+                pastAttendance: 'past_attendance_2',
+                groups: 'kindergarten_groups',
+                dailyFoodCost: 'daily_food_cost',
+                billing: 'kindergarten_billing',
+                paymentStatements: 'payment_statements',
+                admins: 'kindergarten_admins'
+            };
+        }
+        
+        // Дефолтні таблиці
+        return {
+            children: 'children_roster',
+            attendance: 'attendance',
+            pastAttendance: 'past_attendance',
+            groups: 'kindergarten_groups',
+            dailyFoodCost: 'daily_food_cost',
+            billing: 'kindergarten_billing',
+            paymentStatements: 'payment_statements',
+            admins: 'kindergarten_admins'
+        };
+    }
+
+
+    /**
+     * Отримати назву садочка для фільтрації
+     * @param {string|null} kindergartenType - '1', '2', або null
+     * @returns {string|null} - назва садочка або null
+     */
+    getKindergartenName(kindergartenType) {
+        // Мапінг типу садочка на назву в БД
+        const mapping = {
+            '1': 'Дубочок',  // ← Зміни на справжню назву коли буде потрібно
+            '2': 'ЗДО с.Солонка',  // ← Зміни на справжню назву коли буде потрібно
+        };
+        
+        return mapping[kindergartenType] || null;
+    }
+
     async findDebtorById(id) {
         const sql = `
             select
@@ -71,7 +133,7 @@ class KindergartenRepository {
     // МЕТОДИ ДЛЯ ГРУП САДОЧКА
     // ===============================
 
-    async findGroupsByFilter(options) {
+    async findGroupsByFilter(options, kindergartenType = null) {
         const {
             limit,
             offset,
@@ -81,6 +143,9 @@ class KindergartenRepository {
             group_name,
             group_type
         } = options;
+
+        // Отримати назву садочка для фільтрації
+        const filterKindergartenName = this.getKindergartenName(kindergartenType);
 
         const values = [];
         let sql = `
@@ -99,9 +164,13 @@ class KindergartenRepository {
             where 1=1
         `;
 
+        // ФІЛЬТР ПО САДОЧКУ - головна логіка!
+        if (filterKindergartenName) {
+            sql += ` AND kg.kindergarten_name = ?`;
+            values.push(filterKindergartenName);
+        }
+
         // Додаємо фільтри
-        
-        // ✅ ДОДАНО: Фільтр по назві садочка
         if (kindergarten_name) {
             sql += ` AND kg.kindergarten_name ILIKE ?`;
             values.push(`%${kindergarten_name}%`);
@@ -203,7 +272,7 @@ class KindergartenRepository {
     // МЕТОДИ ДЛЯ ДІТЕЙ САДОЧКА
     // ===============================
 
-    async findChildrenByFilter(options) {
+    async findChildrenByFilter(options, kindergartenType = null) {
         const {
             limit,
             offset,
@@ -215,6 +284,9 @@ class KindergartenRepository {
             kindergarten_name,
             group_id
         } = options;
+
+        // Отримати назву садочка для фільтрації
+        const filterKindergartenName = this.getKindergartenName(kindergartenType);
 
         const values = [];
         let sql = `
@@ -236,6 +308,12 @@ class KindergartenRepository {
             left join ower.kindergarten_groups kg on kg.id = cr.group_id
             where 1=1
         `;
+
+        // ФІЛЬТР ПО САДОЧКУ - головна логіка!
+        if (filterKindergartenName) {
+            sql += ` AND kg.kindergarten_name = ?`;
+            values.push(filterKindergartenName);
+        }
 
         // Додаємо фільтри
         if (child_name) {
@@ -336,8 +414,7 @@ class KindergartenRepository {
     async getChildByNameAndParent(childName, parentName, excludeId = null) {
         let sql = `
             SELECT id, child_name, parent_name
-            FROM ower.children_roster
-            WHERE child_name = ? AND parent_name = ?
+            FROM ower.children_roster             WHERE child_name = ? AND parent_name = ?
         `;
         const values = [childName, parentName];
 
@@ -359,8 +436,7 @@ class KindergartenRepository {
         } = childData;
 
         const sql = `
-            INSERT INTO ower.children_roster
-            (child_name, parent_name, phone_number, group_id, created_at)
+            INSERT INTO ower.children_roster             (child_name, parent_name, phone_number, group_id, created_at)
             VALUES (?, ?, ?, ?, ?)
             RETURNING id, child_name, parent_name, phone_number, group_id, created_at
         `;
@@ -390,10 +466,10 @@ class KindergartenRepository {
         return await sqlRequest(sql, values);
     }
 
-    async deleteChild(id) {
+    async deleteChild(id, kindergartenType = null) {
+        const tables = this.getTableNames(kindergartenType);
         const sql = `
-            DELETE FROM ower.children_roster
-            WHERE id = ?
+            DELETE FROM ower.children_roster             WHERE id = ?
             RETURNING id
         `;
         
@@ -404,7 +480,7 @@ class KindergartenRepository {
     // МЕТОДИ ДЛЯ ВІДВІДУВАНОСТІ
     // ===============================
 
-    async findAttendanceByFilter(options) {
+    async findAttendanceByFilter(options, kindergartenType = null) {
         const {
             limit,
             offset,
@@ -416,6 +492,9 @@ class KindergartenRepository {
             date,
             attendance_status
         } = options;
+
+        // Отримати назву садочка для фільтрації
+        const filterKindergartenName = this.getKindergartenName(kindergartenType);
 
         const values = [];
         let paramIndex = 1;
@@ -450,6 +529,13 @@ class KindergartenRepository {
         values.push(filterDate);
         paramIndex++;
 
+        // ФІЛЬТР ПО САДОЧКУ - головна логіка!
+        if (filterKindergartenName) {
+            sql += ` AND kg.kindergarten_name = $${paramIndex}`;
+            values.push(filterKindergartenName);
+            paramIndex++;
+        }
+
         // Додаємо фільтри
         if (child_name) {
             sql += ` AND cr.child_name ILIKE $${paramIndex}`;
@@ -475,16 +561,15 @@ class KindergartenRepository {
             paramIndex++;
         }
 
-        // Додаємо сортування
-        const allowedSortFields = ['child_name', 'group_name'];
-        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'child_name';
-        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'ASC';
-        
-        if (validSortBy === 'child_name') {
-            sql += ` ORDER BY cr.child_name ${validSortDirection}`;
-        } else if (validSortBy === 'group_name') {
-            sql += ` ORDER BY kg.group_name ${validSortDirection}`;
-        }
+        // Додаємо сортування: спочатку молодші групи, потім старші, потім по назві групи, потім по імені дитини
+        sql += ` ORDER BY 
+            CASE 
+                WHEN kg.group_type = 'young' THEN 1
+                WHEN kg.group_type = 'older' THEN 2
+                ELSE 3
+            END ASC,
+            kg.group_name ASC,
+            cr.child_name ASC`;
         
         // Додаємо пагінацію
         sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -573,7 +658,8 @@ class KindergartenRepository {
         return await sqlRequest(sql, values);
     }
 
-    async deleteAttendance(id) {
+    async deleteAttendance(id, kindergartenType = null) {
+        const tables = this.getTableNames(kindergartenType);
         const sql = `
             DELETE FROM ower.attendance 
             WHERE id = ?
@@ -1250,7 +1336,19 @@ class KindergartenRepository {
     // ОТРИМАННЯ ГРУП ПО САДОЧКУ
     // ===============================
 
-    async getGroupsByKindergarten(kindergartenName) {
+    async getGroupsByKindergarten(kindergartenType) {
+        // ✅ ВИПРАВЛЕНО: Використовуємо getKindergartenName для отримання назви
+        const kindergartenName = this.getKindergartenName(kindergartenType);
+        
+        console.log('🗄️ Repository getGroupsByKindergarten:');
+        console.log('   kindergartenType:', kindergartenType);
+        console.log('   kindergartenName:', kindergartenName);
+
+        if (!kindergartenName) {
+            console.log('   ❌ kindergartenName пустий! Повертаємо []');
+            return [];  // Якщо не вдалося визначити садочок - повертаємо порожній масив
+        }
+        
         const sql = `
             SELECT 
                 id,
@@ -1261,6 +1359,8 @@ class KindergartenRepository {
             WHERE kindergarten_name = ?
             ORDER BY group_name ASC
         `;
+        
+        console.log('   📊 SQL result:', result ? result.length : 0, 'груп');
         
         return await sqlRequest(sql, [kindergartenName]);
     }
@@ -1756,7 +1856,7 @@ class KindergartenRepository {
     // МЕТОДИ ДЛЯ АРХІВНИХ ВІДВІДУВАНЬ (PAST_ATTENDANCE)
     // ===============================
 
-    async findPastAttendanceByFilter(options) {
+    async findPastAttendanceByFilter(options, kindergartenType = null) {
         const {
             limit,
             offset,
@@ -1768,6 +1868,9 @@ class KindergartenRepository {
             date,
             attendance_status
         } = options;
+
+        // Отримати назву садочка для фільтрації
+        const filterKindergartenName = this.getKindergartenName(kindergartenType);
 
         const values = [];
         let paramIndex = 1;
@@ -1810,6 +1913,13 @@ class KindergartenRepository {
         if (filterDate) {
             sql += ` AND pa.date = $${paramIndex}`;
             values.push(filterDate);
+            paramIndex++;
+        }
+
+        // ФІЛЬТР ПО САДОЧКУ - головна логіка!
+        if (filterKindergartenName) {
+            sql += ` AND pa.kindergarten_name = $${paramIndex}`;
+            values.push(filterKindergartenName);
             paramIndex++;
         }
 

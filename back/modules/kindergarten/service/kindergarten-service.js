@@ -4,6 +4,29 @@ const logRepository = require('../../log/repository/log-repository');
 
 class KindergartenService {
 
+
+    /**
+     * Визначити тип садочка з URL запиту
+     * @param {object} request - Fastify request object
+     * @returns {string|null} - '1', '2', або null для спільних таблиць
+     */
+    getKindergartenType(request) {
+        const url = request.url || request.raw?.url || '';
+        
+        if (url.includes('/kindergarten_1/') || url.includes('/kindergarten_1?')) {
+            console.log('🎯 Kindergarten type detected: 1');
+            return '1';
+        }
+        
+        if (url.includes('/kindergarten_2/') || url.includes('/kindergarten_2?')) {
+            console.log('🎯 Kindergarten type detected: 2');
+            return '2';
+        }
+        
+        console.log('🎯 Kindergarten type detected: null (shared tables)');
+        return null;
+    }
+
     async getDebtByDebtorId(request) {
         const userData = await KindergartenRepository.findDebtorById(request.params?.id)
         return userData[0];
@@ -31,6 +54,9 @@ class KindergartenService {
     // ===============================
 
     async findGroupsByFilter(request) {
+        // Визначити тип садочка з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
         const { 
             page = 1, 
             limit = 16, 
@@ -72,7 +98,7 @@ class KindergartenService {
             group_name,
             group_type,
             ...whereConditions
-        });
+        }, kindergartenType);
 
         return paginationData(userData[0], page, limit);
     }
@@ -194,6 +220,9 @@ class KindergartenService {
     // ===============================
 
     async findChildrenByFilter(request) {
+        // Визначити тип садочка з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
         const { 
             page = 1, 
             limit = 16, 
@@ -230,12 +259,13 @@ class KindergartenService {
             sort_by,
             sort_direction,
             ...whereConditions
-        });
+        }, kindergartenType);
 
         return paginationData(userData[0], page, limit, userData[1]);
     }
 
     async getChildById(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const { id } = request.params;
         const childData = await KindergartenRepository.getChildById(id);
 
@@ -247,6 +277,7 @@ class KindergartenService {
     }
 
     async createChild(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const {
             child_name,
             parent_name,
@@ -301,6 +332,7 @@ class KindergartenService {
     }
 
     async updateChild(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const { id } = request.params;
         const updateData = request.body;
 
@@ -349,6 +381,7 @@ class KindergartenService {
     }
 
     async deleteChild(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const { id } = request.params;
 
         const existingChild = await KindergartenRepository.getChildById(id);
@@ -384,6 +417,9 @@ class KindergartenService {
     // ===============================
 
     async findAttendanceByFilter(request) {
+        // Визначити тип садочка з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
         const { 
             page = 1, 
             limit = 16, 
@@ -447,7 +483,7 @@ class KindergartenService {
             date: filterDate,
             attendance_status,
             ...whereConditions
-        });
+        }, kindergartenType);
 
         return paginationData(userData[0], page, limit);
     }
@@ -464,6 +500,7 @@ class KindergartenService {
     }
 
     async createAttendance(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const {
             date,
             child_id,
@@ -608,6 +645,7 @@ class KindergartenService {
     }
 
     async updateAttendance(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const { id } = request.params;
         const updateData = request.body;
 
@@ -778,6 +816,7 @@ class KindergartenService {
     }
 
     async deleteAttendance(request) {
+        const kindergartenType = this.getKindergartenType(request);
         const { id } = request.params;
 
         const existingRecord = await KindergartenRepository.getAttendanceById(id);
@@ -1747,13 +1786,25 @@ class KindergartenService {
     // ===============================
 
     async getGroupsByKindergarten(request) {
-        const { kindergarten_name } = request.body;
+        // ✅ ВИПРАВЛЕНО: Автоматично визначаємо садочок з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
+        console.log('🎯 getGroupsByKindergarten викликано!');
+        console.log('   URL:', request.url);
+        console.log('   kindergartenType:', kindergartenType);
 
-        if (!kindergarten_name) {
-            throw new Error('Назва садочка обов\'язкова');
+        if (!kindergartenType) {
+            throw new Error('Не вдалося визначити тип садочка з URL');
         }
 
-        const groups = await KindergartenRepository.getGroupsByKindergarten(kindergarten_name);
+        const groups = await KindergartenRepository.getGroupsByKindergarten(kindergartenType);
+
+        console.log('   Знайдено груп:', groups ? groups.length : 0);
+        if (groups && groups.length > 0) {
+            groups.forEach(g => {
+                console.log(`   - ${g.group_name} (${g.kindergarten_name})`);
+            });
+        }
 
         // Логуємо пошук
         await logRepository.createLog({
@@ -1761,7 +1812,7 @@ class KindergartenService {
             uid: request?.user?.id,
             action: 'SEARCH',
             client_addr: request?.ip,
-            application_name: `Отримання груп для садочку: ${kindergarten_name}`,
+            application_name: `Отримання груп для садочку (тип: ${kindergartenType})`,
             action_stamp_tx: new Date(),
             action_stamp_stm: new Date(),
             action_stamp_clk: new Date(),
@@ -2191,6 +2242,9 @@ class KindergartenService {
     // ===============================
 
     async findPastAttendanceByFilter(request) {
+        // Визначити тип садочка з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
         const { 
             page = 1, 
             limit = 16, 
@@ -2257,6 +2311,9 @@ class KindergartenService {
     // ===============================
 
     async findPastAttendanceByFilter(request) {
+        // Визначити тип садочка з URL
+        const kindergartenType = this.getKindergartenType(request);
+        
         const { 
             page = 1, 
             limit = 16, 
@@ -2308,7 +2365,7 @@ class KindergartenService {
             date: filterDate,
             attendance_status,
             ...whereConditions
-        });
+        }, kindergartenType);
 
         return paginationData(userData[0], page, limit);
     }

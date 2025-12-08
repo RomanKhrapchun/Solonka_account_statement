@@ -69,13 +69,16 @@ const DistrictsPage = lazy(() => import('./pages/Districts/DistrictsPage.jsx'));
 const KindergartenDebtorsList = lazy(() => import('./pages/Kindergarten/KindergartenList.jsx'))
 const PrintKindergartenCardView = lazy(() => import ('./components/Cards/PrintKindergartenCard.jsx'))
 const KindergartenGroups = lazy(() => import('./pages/Kindergarten/KindergartenGroups.jsx'));
-const ChildrenRoster = lazy(() => import('./pages/Kindergarten/ChildrenRoster.jsx'));
-const Attendance = lazy(() => import('./pages/Kindergarten/Attendance.jsx'));
 const DailyFoodCost = lazy(() => import('./pages/Kindergarten/DailyFoodCost.jsx'));
 const KindergartenBilling = lazy(() => import('./pages/Kindergarten/KindergartenBilling.jsx'));
 const Admins = lazy(() => import('./pages/Kindergarten/Admins'));
 const PaymentStatement = lazy(() => import('./pages/Kindergarten/PaymentStatement'));
-const PastAttendance = lazy(() => import('./pages/Kindergarten/PastAttendance.jsx'));
+const ChildrenRoster1 = lazy(() => import('./pages/Kindergarten/Kindergarten1/ChildrenRoster.jsx'));
+const Attendance1 = lazy(() => import('./pages/Kindergarten/Kindergarten1/Attendance.jsx'));
+const PastAttendance1 = lazy(() => import('./pages/Kindergarten/Kindergarten1/PastAttendance.jsx'));
+const ChildrenRoster2 = lazy(() => import('./pages/Kindergarten/Kindergarten2/ChildrenRoster.jsx'));
+const Attendance2 = lazy(() => import('./pages/Kindergarten/Kindergarten2/Attendance.jsx'));
+const PastAttendance2 = lazy(() => import('./pages/Kindergarten/Kindergarten2/PastAttendance.jsx'));
 // Sports complex
 const SportsRequisite = lazy(() => import('./pages/SportsСomplex/Requisite.jsx'));
 const SportsBills = lazy(() => import('./pages/SportsСomplex/Bills.jsx'));
@@ -166,13 +169,16 @@ function App() {
                     <Route exact path="kindergarten" element={<Suspense fallback={<Loader/>}><KindergartenDebtorsList /></Suspense>} />
                     <Route exact path="kindergarten/:id/print" element={<Suspense fallback={<Loader/>}><PrintKindergartenCardView /></Suspense>} />
                     <Route exact path="kindergarten/groups" element={<Suspense fallback={<Loader/>}><KindergartenGroups /></Suspense>} />
-                    <Route exact path="kindergarten/childrenRoster" element={<Suspense fallback={<Loader/>}><ChildrenRoster /></Suspense>} />
-                    <Route exact path="kindergarten/attendance" element={<Suspense fallback={<Loader/>}><Attendance /></Suspense>} />
                     <Route exact path="kindergarten/daily_food_cost" element={<Suspense fallback={<Loader/>}><DailyFoodCost /></Suspense>} />
                     <Route exact path="kindergarten/billing" element={<Suspense fallback={<Loader/>}><KindergartenBilling /></Suspense>} />
                     <Route exact path="kindergarten/admins" element={<Suspense fallback={<Loader/>}><Admins /></Suspense>} />
                     <Route exact path="kindergarten/payment_statements" element={<Suspense fallback={<Loader/>}><PaymentStatement /></Suspense>} />
-                    <Route exact path="kindergarten/past_attendance" element={<Suspense fallback={<Loader/>}><PastAttendance /></Suspense>} />
+                    <Route exact path="kindergarten_1/childrenRoster" element={<Suspense fallback={<Loader/>}><ChildrenRoster1 /></Suspense>} />
+                    <Route exact path="kindergarten_1/attendance" element={<Suspense fallback={<Loader/>}><Attendance1 /></Suspense>} />
+                    <Route exact path="kindergarten_1/past_attendance" element={<Suspense fallback={<Loader/>}><PastAttendance1 /></Suspense>} />
+                    <Route exact path="kindergarten_2/childrenRoster" element={<Suspense fallback={<Loader/>}><ChildrenRoster2 /></Suspense>} />
+                    <Route exact path="kindergarten_2/attendance" element={<Suspense fallback={<Loader/>}><Attendance2 /></Suspense>} />
+                    <Route exact path="kindergarten_2/past_attendance" element={<Suspense fallback={<Loader/>}><PastAttendance2 /></Suspense>} />
                     {/* Districts Routes */}
                     <Route exact path="districts" element={<Suspense fallback={<Loader />}><DistrictsPage /></Suspense>} />
                     <Route exact path="districts/:districtId" element={<Suspense fallback={<Loader />}><DistrictList /></Suspense>} />

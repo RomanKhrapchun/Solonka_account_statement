@@ -1,19 +1,19 @@
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom'
 import classNames from 'classnames';
-import useFetch from "../../hooks/useFetch";
-import Table from "../../components/common/Table/Table";
-import {generateIcon, iconMap, STATUS} from "../../utils/constants.jsx";
-import PageError from "../ErrorPage/PageError";
-import Pagination from "../../components/common/Pagination/Pagination";
-import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../utils/function";
-import {useNotification} from "../../hooks/useNotification";
-import {Context} from "../../main";
-import Dropdown from "../../components/common/Dropdown/Dropdown";
-import SkeletonPage from "../../components/common/Skeleton/SkeletonPage";
-import Input from "../../components/common/Input/Input";
-import Select from "../../components/common/Select/Select";
-import Button from "../../components/common/Button/Button";
+import useFetch from "../../../hooks/useFetch";
+import Table from "../../../components/common/Table/Table";
+import {generateIcon, iconMap, STATUS} from "../../../utils/constants.jsx";
+import PageError from "../../ErrorPage/PageError";
+import Pagination from "../../../components/common/Pagination/Pagination";
+import {fetchFunction, hasOnlyAllowedParams, validateFilters} from "../../../utils/function";
+import {useNotification} from "../../../hooks/useNotification";
+import {Context} from "../../../main";
+import Dropdown from "../../../components/common/Dropdown/Dropdown";
+import SkeletonPage from "../../../components/common/Skeleton/SkeletonPage";
+import Input from "../../../components/common/Input/Input";
+import Select from "../../../components/common/Select/Select";
+import Button from "../../../components/common/Button/Button";
 
 // Іконки
 const filterIcon = generateIcon(iconMap.filter, null, 'currentColor', 20, 20)
@@ -129,7 +129,7 @@ const PastAttendance = () => {
     });
 
     const isFirstAPI = useRef(true);
-    const {error, status, data, retryFetch} = useFetch('api/kindergarten/past_attendance/filter', {
+    const {error, status, data, retryFetch} = useFetch('api/kindergarten_1/past_attendance/filter', {
         method: 'post',
         data: stateAttendance.sendData
     })
@@ -152,7 +152,7 @@ const PastAttendance = () => {
         }
         
         console.log('🔄 Викликаємо API для архівних відвідувань з датою:', stateAttendance.sendData.date);
-        retryFetch('api/kindergarten/past_attendance/filter', {
+        retryFetch('api/kindergarten_1/past_attendance/filter', {
             method: 'post',
             data: stateAttendance.sendData
         });
